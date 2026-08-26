@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Core rule: user owns everything under their uid ──────────────
+    // Simple, fast — no extra Firestore reads in rules
+
+    // User profile document
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
+    // All subcollections under users/{userId}
+    // Covers: subjects, chapters, lectures, progress, notes,
+    //         bookmarks, studySessions, settings, studyPlans
+    match /users/{userId}/{subcollection}/{docId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
+    // Deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

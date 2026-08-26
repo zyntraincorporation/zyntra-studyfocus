@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+/* ── ZyntraFocus Design System ─────────────────────────────────────── */
+
+@theme {
+  /* Color palette */
+  --color-bg-primary: #0B0F14;
+  --color-bg-surface: #111820;
+  --color-bg-elevated: #17202A;
+  --color-bg-overlay: #1E2A36;
+
+  --color-brand: #6366F1;
+  --color-brand-hover: #5254CC;
+  --color-brand-light: #818CF8;
+
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-info: #3B82F6;
+
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+  --color-text-disabled: #475569;
+
+  --color-border: #1E2A36;
+  --color-border-subtle: #17202A;
+  --color-border-focus: #6366F1;
+
+  /* Light mode overrides */
+  --color-bg-primary-light: #F8FAFC;
+  --color-bg-surface-light: #FFFFFF;
+  --color-bg-elevated-light: #F1F5F9;
+  --color-text-primary-light: #0F172A;
+  --color-text-secondary-light: #475569;
+  --color-border-light: #E2E8F0;
+
+  /* Typography scale */
+  --font-sans: 'Inter', 'Noto Sans Bengali', system-ui, sans-serif;
+
+  /* Spacing and radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+}
+
+/* ── Base styles ─────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Light mode */
+  .light body {
+    color: var(--color-text-primary-light);
+    background-color: var(--color-bg-primary-light);
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Focus visible */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1E2A36;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2D3B4D;
+  }
+}
+
+/* ── Utility classes ─────────────────────────────────────────────── */
+@layer utilities {
+  .surface {
+    background-color: var(--color-bg-surface);
+  }
+  .surface-elevated {
+    background-color: var(--color-bg-elevated);
+  }
+  .text-primary {
+    color: var(--color-text-primary);
+  }
+  .text-secondary {
+    color: var(--color-text-secondary);
+  }
+  .text-muted {
+    color: var(--color-text-muted);
+  }
+  .border-subtle {
+    border-color: var(--color-border);
+  }
+
+  /* 16:9 aspect ratio for video container */
+  .aspect-video-container {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%;
+    overflow: hidden;
+  }
+  .aspect-video-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  /* Fade in animation */
+  .animate-fade-in {
+    animation: fadeIn var(--transition-base) ease forwards;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--color-bg-surface) 25%,
+      var(--color-bg-elevated) 50%,
+      var(--color-bg-surface) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
