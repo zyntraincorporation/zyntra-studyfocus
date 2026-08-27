@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Play, Plus, TrendingUp, Flame, Target, BookOpen, ChevronRight } from 'lucide-react'
 import { getSubjects, getLecture } from '@/services/curriculum.service'
-import { getTodaySessions, sumSessionSeconds } from '@/services/sessions.service'
+import { getSessionsByDateRange, sumSessionSeconds } from '@/services/sessions.service'
+import { calculateStreak, syncStreakWithFirestore } from '@/utils/streak.utils'
+import { getLocalDateKey } from '@/utils/date.utils'
 import type { Subject, Lecture } from '@/types/curriculum.types'
 import type { StudySession } from '@/types/progress.types'
 import { useAuth } from '@/contexts/AuthContext'
@@ -17,7 +19,7 @@ import { useProgressStats } from '@/hooks/useProgressStats'
 export default function DashboardPage() {
   const { user, userDoc, progressMap } = useAuth()
   const [subjects, setSubjects] = useState<Subject[]>([])
-  const [todaySessions, setTodaySessions] = useState<StudySession[]>([])
+  const [sessions, setSessions] = useState<StudySession[]>([])
   const [lastWatchedLecture, setLastWatchedLecture] = useState<Lecture | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { getSubjectProgress } = useProgressStats()
@@ -26,16 +28,22 @@ export default function DashboardPage() {
     if (!user) return
     Promise.all([
       getSubjects(user.uid),
-      getTodaySessions(user.uid),
-    ]).then(([subs, sessions]) => {
+      getSessionsByDateRange(user.uid, 60),
+    ]).then(([subs, sessList]) => {
       setSubjects(subs)
-      setTodaySessions(sessions)
+      setSessions(sessList)
+      syncStreakWithFirestore(user.uid, userDoc, sessList)
     }).finally(() => setIsLoading(false))
-  }, [user])
+  }, [user, userDoc])
 
+  const todayKey = getLocalDateKey()
+  const todaySessions = sessions.filter((s) => s.dateKey === todayKey)
   const todaySeconds = sumSessionSeconds(todaySessions)
   const goalMinutes = userDoc?.dailyGoalMinutes ?? 60
   const goalProgress = Math.min(Math.round((todaySeconds / 60 / goalMinutes) * 100), 100)
+
+  // Real-time target hit based streak stats
+  const streakStats = calculateStreak(userDoc, sessions)
 
   // Last watched lecture from progressMap
   const lastWatched = Object.values(progressMap)
@@ -76,7 +84,7 @@ export default function DashboardPage() {
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-[#F8FAFC]">
-          {getGreeting()}, {userDoc?.displayName?.split(' ')[0] ?? 'there'} 👋
+          {getGreeting()}, {userDoc?.displayName?.split(' ')[0] || 'Saiful'} 👋
         </h1>
         <p className="text-sm text-[#64748B] mt-0.5">
           {subjects.length === 0
@@ -108,10 +116,10 @@ export default function DashboardPage() {
             accent="#6366F1"
           />
           <StatCard
-            icon={<Flame size={18} className="text-[#F59E0B]" />}
+            icon={<Flame size={18} className={streakStats.currentStreak > 0 ? "text-[#F59E0B]" : "text-[#64748B]"} />}
             label="Streak"
-            value={`${userDoc?.streak ?? 0}d`}
-            sub={`Best: ${userDoc?.longestStreak ?? 0}d`}
+            value={`${streakStats.currentStreak}d`}
+            sub={`Best: ${streakStats.longestStreak}d`}
             accent="#F59E0B"
           />
           <StatCard

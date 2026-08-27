@@ -7,10 +7,10 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  Zap,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { ROUTES } from '@/constants/routes'
+import appIcon from '@/assets/icon.jpg'
 
 const NAV_ITEMS = [
   { to: ROUTES.DASHBOARD, icon: LayoutDashboard, label: 'Dashboard' },
@@ -28,9 +28,11 @@ export default function Sidebar() {
     <aside className="h-full flex flex-col bg-[#0B0F14] border-r border-[#1E2A36] w-56">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 py-5 border-b border-[#1E2A36] shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-[#6366F1] flex items-center justify-center">
-          <Zap size={16} className="text-white" />
-        </div>
+        <img
+          src={appIcon}
+          alt="ZyntraFocus"
+          className="w-8 h-8 rounded-lg object-cover shadow-sm ring-1 ring-white/10"
+        />
         <span className="font-bold text-[#F8FAFC] tracking-tight">ZyntraFocus</span>
       </div>
 
@@ -59,10 +61,10 @@ export default function Sidebar() {
         {userDoc && (
           <div className="flex items-center gap-2.5 px-2 py-1.5">
             <div className="w-7 h-7 rounded-full bg-[#6366F1] flex items-center justify-center text-white text-xs font-bold shrink-0">
-              {userDoc.displayName.charAt(0).toUpperCase()}
+              {(userDoc.displayName || 'Saiful').charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-[#F8FAFC] truncate">{userDoc.displayName}</p>
+              <p className="text-xs font-medium text-[#F8FAFC] truncate">{userDoc.displayName || 'Saiful'}</p>
               <p className="text-[10px] text-[#64748B] truncate">{userDoc.email}</p>
             </div>
           </div>

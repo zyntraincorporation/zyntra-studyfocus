@@ -1,65 +1,27 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
-import type { Theme } from '@/types/user.types'
+/**
+ * ThemeContext — ZyntraFocus is dark-only.
+ * This context always applies the 'dark' class to <html>.
+ * The user-facing theme toggle has been removed.
+ * Context is kept for structural consistency and potential future use.
+ */
+import React, { createContext, useContext, useEffect } from 'react'
 
 interface ThemeContextValue {
-  theme: Theme
-  resolvedTheme: 'dark' | 'light'
-  setTheme: (theme: Theme) => void
+  resolvedTheme: 'dark'
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
-function getSystemTheme(): 'dark' | 'light' {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
-function resolveTheme(theme: Theme): 'dark' | 'light' {
-  if (theme === 'system') return getSystemTheme()
-  return theme
-}
-
-function applyTheme(resolved: 'dark' | 'light') {
-  const root = document.documentElement
-  if (resolved === 'dark') {
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  // Always dark — apply once on mount
+  useEffect(() => {
+    const root = document.documentElement
     root.classList.remove('light')
     root.classList.add('dark')
-  } else {
-    root.classList.remove('dark')
-    root.classList.add('light')
-  }
-}
-
-const STORAGE_KEY = 'zyntrafocus-theme'
-
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as Theme | null
-    return stored ?? 'dark'
-  })
-
-  const resolvedTheme = resolveTheme(theme)
-
-  // Apply theme on mount and change
-  useEffect(() => {
-    applyTheme(resolvedTheme)
-  }, [resolvedTheme])
-
-  // Listen to system theme changes
-  useEffect(() => {
-    if (theme !== 'system') return
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = () => applyTheme(resolveTheme('system'))
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [theme])
-
-  const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme)
-    localStorage.setItem(STORAGE_KEY, newTheme)
-  }
+  }, [])
 
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme }}>
+    <ThemeContext.Provider value={{ resolvedTheme: 'dark' }}>
       {children}
     </ThemeContext.Provider>
   )

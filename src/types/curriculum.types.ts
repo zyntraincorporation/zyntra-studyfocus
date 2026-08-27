@@ -8,6 +8,24 @@ export type VideoStatus =
   | 'deleted'
   | 'unknown'
 
+// ── Timestamps ────────────────────────────────────────────────────────
+export interface LectureTimestamp {
+  time: number    // seconds from video start (integer)
+  label: string   // display-ready label
+}
+
+// ── Attachments ───────────────────────────────────────────────────────
+export type AttachmentType = 'slides' | 'pdf' | 'notes' | 'other'
+
+export interface LectureAttachment {
+  id: string              // crypto.randomUUID()
+  title: string
+  url: string             // Google Drive or any valid URL
+  type?: AttachmentType
+  description?: string
+}
+
+// ── Subject ───────────────────────────────────────────────────────────
 export interface Subject {
   id: string
   name: string
@@ -22,6 +40,7 @@ export interface Subject {
   updatedAt: Timestamp
 }
 
+// ── Chapter ───────────────────────────────────────────────────────────
 export interface Chapter {
   id: string
   subjectId: string
@@ -35,6 +54,7 @@ export interface Chapter {
   updatedAt: Timestamp
 }
 
+// ── Lecture ───────────────────────────────────────────────────────────
 export interface Lecture {
   id: string
   chapterId: string
@@ -53,11 +73,14 @@ export interface Lecture {
   isImportant: boolean
   isActive: boolean
   videoStatus: VideoStatus
+  slideUrl?: string
+  timestamps?: LectureTimestamp[]
+  attachments?: LectureAttachment[]
   createdAt: Timestamp
   updatedAt: Timestamp
 }
 
-// Form types for creating/editing
+// ── Form types for creating / editing ─────────────────────────────────
 export type SubjectInput = {
   name: string
   description: string
@@ -70,6 +93,7 @@ export type ChapterInput = {
   description: string
   subjectId: string
   subjectName: string
+  order?: number
 }
 
 export type LectureInput = {
@@ -85,4 +109,7 @@ export type LectureInput = {
   chapterName: string
   subjectId: string
   subjectName: string
+  slideUrl?: string
+  timestamps?: LectureTimestamp[]
+  attachments?: LectureAttachment[]
 }

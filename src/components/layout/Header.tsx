@@ -1,7 +1,7 @@
 import { useLocation, Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { getGreeting } from '@/utils/time.utils'
-import { Zap } from 'lucide-react'
+import appIcon from '@/assets/icon.jpg'
 
 export default function Header() {
   const { userDoc } = useAuth()
@@ -14,9 +14,11 @@ export default function Header() {
     <header className="flex items-center justify-between px-4 md:px-6 h-14 border-b border-[#1E2A36] bg-[#0B0F14] shrink-0">
       {/* Mobile logo */}
       <Link to="/dashboard" className="flex items-center gap-2 md:hidden">
-        <div className="w-7 h-7 rounded-lg bg-[#6366F1] flex items-center justify-center">
-          <Zap size={14} className="text-white" />
-        </div>
+        <img
+          src={appIcon}
+          alt="ZyntraFocus"
+          className="w-7 h-7 rounded-lg object-cover shadow-sm ring-1 ring-white/10"
+        />
         <span className="text-sm font-bold text-[#F8FAFC]">ZyntraFocus</span>
       </Link>
 

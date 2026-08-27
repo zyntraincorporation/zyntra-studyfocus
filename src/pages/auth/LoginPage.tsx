@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { Mail, Lock, Zap, Eye, EyeOff } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { signIn } from '@/services/auth.service'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import appIcon from '@/assets/icon.jpg'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -38,8 +39,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#6366F1] flex items-center justify-center mb-4 shadow-lg">
-            <Zap size={28} className="text-white" />
+          <div className="w-16 h-16 rounded-2xl overflow-hidden mb-4 shadow-xl ring-2 ring-[#6366F1]/30">
+            <img src={appIcon} alt="ZyntraFocus Logo" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-2xl font-bold text-[#F8FAFC] tracking-tight">ZyntraFocus</h1>
           <p className="text-sm text-[#64748B] mt-1">Your distraction-free study space</p>

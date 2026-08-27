@@ -141,7 +141,8 @@ export async function getChapters(
     orderBy('order', 'asc')
   )
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Chapter)
+  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Chapter)
+  return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 }
 
 export async function getChapter(
@@ -159,11 +160,14 @@ export async function createChapter(
 ): Promise<string> {
   const batch = writeBatch(db)
 
+  const orderValue = typeof input.order === 'number' ? input.order : currentCount
+  const cleanedInput = cleanUndefined(input)
+
   // Create chapter
   const newRef = doc(chaptersCol(userId))
   batch.set(newRef, {
-    ...input,
-    order: currentCount,
+    ...cleanedInput,
+    order: orderValue,
     isActive: true,
     lectureCount: 0,
     createdAt: serverTimestamp(),
@@ -183,10 +187,11 @@ export async function createChapter(
 export async function updateChapter(
   userId: string,
   chapterId: string,
-  data: Partial<Pick<Chapter, 'name' | 'description'>>
+  data: Partial<Pick<Chapter, 'name' | 'description' | 'order'>>
 ): Promise<void> {
+  const cleanedData = cleanUndefined(data)
   await updateDoc(chapterDoc(userId, chapterId), {
-    ...data,
+    ...cleanedData,
     updatedAt: serverTimestamp(),
   })
 }
@@ -259,6 +264,12 @@ export async function getLecturesBySubject(
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Lecture)
 }
 
+function cleanUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => v !== undefined)
+  ) as Partial<T>
+}
+
 export async function createLecture(
   userId: string,
   input: LectureInput,
@@ -266,10 +277,13 @@ export async function createLecture(
 ): Promise<string> {
   const batch = writeBatch(db)
 
+  // Clean undefined properties so Firestore doesn't reject them
+  const cleanedInput = cleanUndefined(input)
+
   // Create lecture
   const newRef = doc(lecturesCol(userId))
   batch.set(newRef, {
-    ...input,
+    ...cleanedInput,
     order: currentCount,
     isActive: true,
     isImportant: false,
@@ -295,10 +309,11 @@ export async function createLecture(
 export async function updateLecture(
   userId: string,
   lectureId: string,
-  data: Partial<Pick<Lecture, 'title' | 'description' | 'isImportant' | 'videoStatus'>>
+  data: Partial<Pick<Lecture, 'title' | 'description' | 'isImportant' | 'videoStatus' | 'slideUrl' | 'timestamps' | 'attachments'>>
 ): Promise<void> {
+  const cleanedData = cleanUndefined(data)
   await updateDoc(lectureDoc(userId, lectureId), {
-    ...data,
+    ...cleanedData,
     updatedAt: serverTimestamp(),
   })
 }

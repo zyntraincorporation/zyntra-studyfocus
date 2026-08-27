@@ -30,7 +30,7 @@ export default function SubjectDetailPage() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Chapter | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Chapter | null>(null)
-  const [form, setForm] = useState({ name: '', description: '' })
+  const [form, setForm] = useState({ name: '', description: '', order: 1 })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { getChapterProgress } = useProgressStats()
@@ -48,19 +48,42 @@ export default function SubjectDetailPage() {
 
   useEffect(() => { reload() }, [user, subjectId])
 
-  const openCreate = () => { setEditing(null); setForm({ name: '', description: '' }); setShowForm(true) }
-  const openEdit = (c: Chapter) => { setEditing(c); setForm({ name: c.name, description: c.description }); setShowForm(true) }
+  const openCreate = () => {
+    setEditing(null)
+    const nextOrder = chapters.length > 0
+      ? Math.max(...chapters.map((c) => c.order ?? 0)) + 1
+      : 1
+    setForm({ name: '', description: '', order: nextOrder })
+    setShowForm(true)
+  }
+
+  const openEdit = (c: Chapter) => {
+    setEditing(c)
+    setForm({ name: c.name, description: c.description, order: c.order ?? 1 })
+    setShowForm(true)
+  }
 
   const handleSubmit = async () => {
     if (!user || !subject || !form.name.trim()) return
+    const orderNum = Number(form.order) || 1
     setIsSubmitting(true)
     if (editing) {
-      await updateChapter(user.uid, editing.id, { name: form.name, description: form.description })
+      await updateChapter(user.uid, editing.id, {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        order: orderNum,
+      })
     } else {
       await createChapter(
         user.uid,
-        { name: form.name, description: form.description, subjectId: subject.id, subjectName: subject.name },
-        chapters.length
+        {
+          name: form.name.trim(),
+          description: form.description.trim(),
+          subjectId: subject.id,
+          subjectName: subject.name,
+          order: orderNum,
+        },
+        orderNum
       )
     }
     setShowForm(false)
@@ -126,8 +149,8 @@ export default function SubjectDetailPage() {
                 className="group flex items-center gap-3 bg-[#111820] border border-[#1E2A36] rounded-xl p-4 hover:border-[#6366F1]/40 transition-all"
               >
                 {/* Number */}
-                <span className="text-xs font-mono text-[#475569] w-6 shrink-0 text-center">
-                  {String(idx + 1).padStart(2, '0')}
+                <span className="text-xs font-mono text-[#818CF8] bg-[#6366F1]/10 px-2 py-1 rounded-md shrink-0 text-center font-bold">
+                  {String(c.order ?? idx + 1).padStart(2, '0')}
                 </span>
 
                 {/* Info */}
@@ -176,12 +199,26 @@ export default function SubjectDetailPage() {
       {/* Create/Edit Modal */}
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Chapter' : 'New Chapter'}>
         <div className="space-y-4">
-          <Input
-            label="Chapter Name *"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. Chapter 1: Vectors"
-          />
+          <div className="flex gap-3">
+            <div className="w-28 shrink-0">
+              <Input
+                label="Chapter Serial *"
+                type="number"
+                min={1}
+                value={form.order}
+                onChange={(e) => setForm({ ...form, order: parseInt(e.target.value) || 1 })}
+                placeholder="1, 2..."
+              />
+            </div>
+            <div className="flex-1">
+              <Input
+                label="Chapter Name *"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Vectors / Organic Chemistry"
+              />
+            </div>
+          </div>
           <Input
             label="Description"
             value={form.description}

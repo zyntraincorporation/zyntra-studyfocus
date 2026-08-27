@@ -50,7 +50,7 @@ export async function getOrCreateUserDocument(user: User): Promise<UserDocument>
   // First login — bootstrap the user document
   const newUser: Omit<UserDocument, 'createdAt' | 'lastLoginAt'> = {
     uid: user.uid,
-    displayName: user.displayName ?? user.email?.split('@')[0] ?? 'User',
+    displayName: user.displayName ?? (user.email?.split('@')[0] === 'student' ? 'Saiful' : (user.email?.split('@')[0] ?? 'Saiful')),
     email: user.email ?? '',
     photoURL: user.photoURL,
     streak: 0,
@@ -62,6 +62,7 @@ export async function getOrCreateUserDocument(user: User): Promise<UserDocument>
     theme: 'dark',
     breakReminderMinutes: 50,
     streakMinimumMinutes: 10,
+    seekInterval: 10,
   }
 
   await setDoc(ref, {

@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useTheme } from '@/contexts/ThemeContext'
 import { updateUserDocument } from '@/services/users.service'
 import Button from '@/components/ui/Button'
-import type { Theme } from '@/types/user.types'
+import { DEFAULT_SEEK_INTERVAL } from '@/constants/firebase'
 
 export default function SettingsPage() {
   const { userDoc, refreshUserDoc } = useAuth()
-  const { theme, setTheme } = useTheme()
+  const [displayName, setDisplayName] = useState(userDoc?.displayName || 'Saiful')
   const [dailyGoal, setDailyGoal] = useState(userDoc?.dailyGoalMinutes ?? 360)
   const [speed, setSpeed] = useState(userDoc?.preferredSpeed ?? 1)
   const [breakReminder, setBreakReminder] = useState(userDoc?.breakReminderMinutes ?? 50)
+  const [seekInterval, setSeekInterval] = useState<5 | 10>(
+    userDoc?.seekInterval ?? (DEFAULT_SEEK_INTERVAL as 5 | 10)
+  )
   const [isSaving, setIsSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -19,10 +21,11 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setIsSaving(true)
     await updateUserDocument(userDoc.uid, {
+      displayName: displayName.trim() || 'Saiful',
       dailyGoalMinutes: dailyGoal,
       preferredSpeed: speed,
       breakReminderMinutes: breakReminder,
-      theme,
+      seekInterval,
     })
     await refreshUserDoc()
     setIsSaving(false)
@@ -30,54 +33,40 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const themeOptions: { value: Theme; label: string }[] = [
-    { value: 'dark', label: '🌙 Dark' },
-    { value: 'light', label: '☀️ Light' },
-    { value: 'system', label: '🖥️ System' },
-  ]
-
   return (
     <div className="max-w-lg space-y-6 animate-fade-in">
       <h1 className="text-xl font-bold text-[#F8FAFC]">Settings</h1>
 
       {/* Account info */}
-      <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-3">
+      <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-4">
         <h2 className="text-sm font-semibold text-[#94A3B8]">Account</h2>
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-[#6366F1] flex items-center justify-center text-white text-lg font-bold">
-            {userDoc.displayName?.charAt(0).toUpperCase()}
+            {(displayName || 'Saiful').charAt(0).toUpperCase()}
           </div>
-          <div>
-            <p className="font-medium text-[#F8FAFC]">{userDoc.displayName}</p>
-            <p className="text-sm text-[#64748B]">{userDoc.email}</p>
+          <div className="min-w-0">
+            <p className="font-medium text-[#F8FAFC]">{displayName || 'Saiful'}</p>
+            <p className="text-xs text-[#64748B]">{userDoc.email}</p>
           </div>
         </div>
-      </section>
 
-      {/* Theme */}
-      <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-[#94A3B8]">Appearance</h2>
-        <div className="flex gap-2">
-          {themeOptions.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setTheme(value)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors cursor-pointer ${
-                theme === value
-                  ? 'bg-[#6366F1]/10 border-[#6366F1] text-[#818CF8]'
-                  : 'bg-transparent border-[#1E2A36] text-[#94A3B8] hover:border-[#6366F1]/40'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-[#F8FAFC]">Your Name</label>
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Enter your name"
+            className="w-full h-10 rounded-lg border border-[#1E2A36] bg-[#17202A] text-[#F8FAFC] placeholder-[#64748B] text-sm px-3 focus:outline-none focus:ring-2 focus:ring-[#6366F1] focus:border-transparent transition-colors"
+          />
         </div>
       </section>
 
       {/* Study Preferences */}
-      <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-4">
+      <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-5">
         <h2 className="text-sm font-semibold text-[#94A3B8]">Study Preferences</h2>
 
+        {/* Daily goal */}
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-[#F8FAFC]">
             Daily Goal: <span className="text-[#818CF8]">{dailyGoal} min ({Math.round(dailyGoal / 60)}h)</span>
@@ -93,27 +82,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium text-[#F8FAFC]">
-            Default Speed: <span className="text-[#818CF8]">{speed}x</span>
-          </label>
-          <div className="flex gap-2">
-            {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
-              <button
-                key={s}
-                onClick={() => setSpeed(s)}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                  speed === s
-                    ? 'bg-[#6366F1] border-[#6366F1] text-white'
-                    : 'border-[#1E2A36] text-[#94A3B8] hover:border-[#6366F1]/40'
-                }`}
-              >
-                {s}x
-              </button>
-            ))}
-          </div>
-        </div>
-
+        {/* Break reminder */}
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-[#F8FAFC]">
             Break Reminder: <span className="text-[#818CF8]">every {breakReminder} min</span>
@@ -126,6 +95,66 @@ export default function SettingsPage() {
           />
           <div className="flex justify-between text-xs text-[#64748B]">
             <span>15 min</span><span>2 hours</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Playback */}
+      <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-5">
+        <h2 className="text-sm font-semibold text-[#94A3B8]">Playback</h2>
+
+        {/* Default speed */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-[#F8FAFC]">
+            Default Speed: <span className="text-[#818CF8]">{speed}x</span>
+          </label>
+          <div className="flex gap-2 flex-wrap">
+            {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => (
+              <button
+                key={s}
+                onClick={() => setSpeed(s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                  speed === s
+                    ? 'bg-[#6366F1] border-[#6366F1] text-white'
+                    : 'border-[#1E2A36] text-[#94A3B8] hover:border-[#6366F1]/40'
+                }`}
+              >
+                {s}x
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Skip interval */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-[#F8FAFC]">Skip / Seek Interval</label>
+          <p className="text-xs text-[#64748B]">
+            How far the rewind and forward buttons jump when pressed.
+          </p>
+          <div className="flex flex-col gap-2">
+            {([5, 10] as const).map((val) => (
+              <label
+                key={val}
+                className="flex items-center gap-3 cursor-pointer group"
+              >
+                <input
+                  type="radio"
+                  name="seekInterval"
+                  value={val}
+                  checked={seekInterval === val}
+                  onChange={() => setSeekInterval(val)}
+                  className="accent-[#6366F1] w-4 h-4 cursor-pointer"
+                />
+                <span
+                  className={`text-sm transition-colors ${
+                    seekInterval === val ? 'text-[#F8FAFC] font-medium' : 'text-[#94A3B8] group-hover:text-[#F8FAFC]'
+                  }`}
+                >
+                  {val} seconds
+                  {val === 10 && <span className="ml-2 text-xs text-[#475569]">(default)</span>}
+                </span>
+              </label>
+            ))}
           </div>
         </div>
       </section>

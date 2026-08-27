@@ -1,7 +1,8 @@
 import { Timestamp } from 'firebase/firestore'
 
 // V1: No roles. Every authenticated user owns their workspace.
-export type Theme = 'dark' | 'light' | 'system'
+// Theme is locked to dark — no user-facing toggle.
+export type Theme = 'dark'
 
 export interface UserDocument {
   uid: string
@@ -21,6 +22,7 @@ export interface UserDocument {
   theme: Theme
   breakReminderMinutes: number
   streakMinimumMinutes: number
+  seekInterval: 5 | 10
 }
 
 export interface UserPreferences {
@@ -35,5 +37,6 @@ export interface UserPreferences {
   reducedMotion: boolean
   focusModeDefault: boolean
   streakMinimumMinutes: number
+  seekInterval: 5 | 10
   updatedAt: Timestamp
 }

@@ -32,6 +32,12 @@ export const RESUME_THRESHOLD = 30
 // Playback speed options (YouTube IFrame API supported values, max 2x)
 export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const
 
+// Default seek/skip interval in seconds
+export const DEFAULT_SEEK_INTERVAL = 10
+
+// Maximum attachments per lecture
+export const MAX_ATTACHMENTS = 5
+
 // Default user preferences
 export const DEFAULT_PREFS = {
   dailyGoalMinutes: 60,
@@ -44,6 +50,7 @@ export const DEFAULT_PREFS = {
   focusModeDefault: false,
   streakMinimumMinutes: 10,
   theme: 'dark' as const,
+  seekInterval: DEFAULT_SEEK_INTERVAL as 5 | 10,
 }
 
 // Legacy export aliases (keep for backward compat with notes/bookmarks/sessions services)
