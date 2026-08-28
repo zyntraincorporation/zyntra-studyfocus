@@ -63,6 +63,7 @@ export async function getOrCreateUserDocument(user: User): Promise<UserDocument>
     breakReminderMinutes: 50,
     streakMinimumMinutes: 10,
     seekInterval: 10,
+    showClock: true,
   }
 
   await setDoc(ref, {

@@ -51,6 +51,7 @@ export const DEFAULT_PREFS = {
   streakMinimumMinutes: 10,
   theme: 'dark' as const,
   seekInterval: DEFAULT_SEEK_INTERVAL as 5 | 10,
+  showClock: true,
 }
 
 // Legacy export aliases (keep for backward compat with notes/bookmarks/sessions services)

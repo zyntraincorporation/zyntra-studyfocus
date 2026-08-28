@@ -23,6 +23,7 @@ export interface UserDocument {
   breakReminderMinutes: number
   streakMinimumMinutes: number
   seekInterval: 5 | 10
+  showClock?: boolean
 }
 
 export interface UserPreferences {
@@ -38,5 +39,6 @@ export interface UserPreferences {
   focusModeDefault: boolean
   streakMinimumMinutes: number
   seekInterval: 5 | 10
+  showClock?: boolean
   updatedAt: Timestamp
 }

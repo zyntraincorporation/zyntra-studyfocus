@@ -1,4 +1,4 @@
-# FocusLearn
+# ZyntraFocus
 
 ## Distraction-Free Personal Learning Platform
 
@@ -12,17 +12,17 @@
  Document Status:  Master PRD
  Version:  1.0 # 1. PRODUCT VISION
 
-FocusLearn is a distraction-free personal learning platform designed to transform publicly available, embeddable YouTube educational videos into a structured, course-like learning experience.
+ZyntraFocus is a distraction-free personal learning platform designed to transform publicly available, embeddable YouTube educational videos into a structured, course-like learning experience.
 
 The platform does NOT host, download, rip, re-upload, or redistribute YouTube videos.
 
 Instead:
 
 * YouTube remains the video source.
-* FocusLearn provides the structured learning environment.
+* ZyntraFocus provides the structured learning environment.
 * Students organize lectures into Subjects → Chapters → Lectures.
 * Students watch lectures through the official YouTube embedded player.
-* FocusLearn tracks lear progress, notes, bookmarks, study time, completion, goals, and revision activity.
+* ZyntraFocus tracks lear progress, notes, bookmarks, study time, completion, goals, and revision activity.
 
 ## Core Philosophy
 
@@ -30,12 +30,12 @@ YouTube is excellent at distributing educational content.
 
 YouTube is not optimized for focused studying.
 
-FocusLearn solves the second problem.
+ZyntraFocus solves the second problem.
 
 ### Product Principle
 
 > Content comes from YouTube.
-> Structure, organization, progress, and focus come from FocusLearn. # 2. PROBLEM STATEMENT
+> Structure, organization, progress, and focus come from ZyntraFocus. # 2. PROBLEM STATEMENT
 
 Students frequently face the following problems when studying from long-form YouTube lectures:
 
@@ -54,11 +54,11 @@ Students frequently face the following problems when studying from long-form You
 13. Students do not know which topics are weak.
 14. YouTube is optimized for content discovery, not disciplined learning.
 
-FocusLearn addresses these problems. # 3. TARGET EXPERIENCE
+ZyntraFocus addresses these problems. # 3. TARGET EXPERIENCE
 
 A student should be able to:
 
-1. Open FocusLearn.
+1. Open ZyntraFocus.
 2. Choose a subject.
 3. Choose a chapter.
 4. Select a lecture.
@@ -78,8 +78,8 @@ A student should be able to:
 
 The application hierarchy should be:
 
-```text
-FocusLearn
+text
+ZyntraFocus
 │
 ├── Dashboard
 │
@@ -103,7 +103,7 @@ FocusLearn
 ├── Revision
 ├── Analytics
 └── Settings
-``` # 5. USER ROLES
+ # 5. USER ROLES
 
 ## 5.1 Student
 
@@ -143,7 +143,7 @@ For the initial version, the application may have one administrator account. # 6
 
 ## First Visit
 
-```text
+text
 Landing Page
       ↓
 Sign In
@@ -157,11 +157,11 @@ Choose Chapter
 Choose Lecture
       ↓
 Watch
-```
+
 
 ## Returning User
 
-```text
+text
 Login
  ↓
 Dashboard
@@ -169,7 +169,7 @@ Dashboard
 Continue Learning
  ↓
 Resume exact timestamp
-``` # 7. AUTHENTICATION
+ # 7. AUTHENTICATION
 
 Use Firebase Authentication.
 
@@ -190,10 +190,10 @@ After authentication:
 
 Roles:
 
-```text
+text
 student
 admin
-```
+
 
 Never trust a frontend-only role flag.
 
@@ -205,11 +205,11 @@ The Dashboard is the central home screen.
 
 Display:
 
-```text
+text
 Good evening, Nirob 👋
 
 Ready to continue learning?
-```
+
 
 Greeting should dynamically change:
 
@@ -226,7 +226,7 @@ Display the most recently watched unfinished lecture.
 
 Example:
 
-```text
+text
 Physics
 Newtonian Mechanics
 
@@ -235,13 +235,13 @@ Lecture 04 — Friction
 72% completed
 
 [ Continue Learning ]
-```
+
 
 Clicking Continue must resume from the stored timestamp. ### B. Today's Study Goal
 
 Example:
 
-```text
+text
 Today's Goal
 
 4h 32m / 6h
@@ -249,23 +249,23 @@ Today's Goal
 ██████████████░░░░
 
 1h 28m remaining
-``` ### C. Current Streak
+ ### C. Current Streak
 
 Example:
 
-```text
+text
 🔥 12 Day Streak
 
 Best: 18 days
-``` ### D. Subject Progress
+ ### D. Subject Progress
 
 Example:
 
-```text
+text
 Physics        67%
 Chemistry      42%
 Higher Math    54%
-``` ### E. Recent Activity
+ ### E. Recent Activity
 
 Show:
 
@@ -278,20 +278,20 @@ Subjects must be fully customizable.
 
 Example:
 
-```text
+text
 Physics
 Chemistry
 Higher Mathematics
 Biology
 ICT
 English
-```
+
 
 Admin can create unlimited subjects.
 
 Subject fields:
 
-```text
+text
 id
 name
 description
@@ -302,24 +302,24 @@ order
 createdAt
 updatedAt
 isActive
-``` # 10. CHAPTER SYSTEM
+ # 10. CHAPTER SYSTEM
 
 Each subject contains chapters.
 
 Example:
 
-```text
+text
 Physics
 
 01. Vector
 02. Newtonian Mechanics
 03. Work, Energy & Power
 04. Gravitation
-```
+
 
 Chapter fields:
 
-```text
+text
 id
 subjectId
 name
@@ -328,7 +328,7 @@ order
 createdAt
 updatedAt
 isActive
-```
+
 
 Admin can reorder chapters. # 11. LECTURE SYSTEM
 
@@ -336,7 +336,7 @@ Each chapter contains lectures.
 
 Example:
 
-```text
+text
 Newtonian Mechanics
 
 01 — Introduction
@@ -344,11 +344,11 @@ Newtonian Mechanics
 03 — Newton's Second Law
 04 — Friction
 05 — Circular Motion
-```
+
 
 Lecture fields:
 
-```text
+text
 id
 chapterId
 title
@@ -363,19 +363,19 @@ isImportant
 isActive
 createdAt
 updatedAt
-``` # 12. YOUTUBE VIDEO IMPORT
+ # 12. YOUTUBE VIDEO IMPORT
 
 Admin should be able to paste a YouTube URL.
 
 Example:
 
-```text
+text
 Paste YouTube URL
 
 [ https://www.youtube.com/watch?v=XXXXXXXX ]
 
 [ Import Video ]
-```
+
 
 The system should:
 
@@ -394,7 +394,7 @@ The system should:
 
 Preview:
 
-```text
+text
 ┌──────────────────────────────┐
 │          THUMBNAIL           │
 └──────────────────────────────┘
@@ -408,7 +408,7 @@ Duration: 02:43:17
 Embedding: Available
 
 [ Add Lecture ]
-```
+
 
 The system must NOT download the video.
 
@@ -418,11 +418,11 @@ The system must use the official YouTube embedded player. # 13. YOUTUBE URL SUPP
 
 Support common URL formats such as:
 
-```text
+text
 youtube.com/watch?v=VIDEO_ID
 youtu.be/VIDEO_ID
 youtube.com/embed/VIDEO_ID
-```
+
 
 Normalize all supported URLs to a canonical video ID.
 
@@ -430,11 +430,11 @@ Invalid URLs should produce a clear error.
 
 Example:
 
-```text
+text
 Invalid YouTube URL.
 
 Please paste a valid YouTube video link.
-``` # 14. VIDEO PLAYER EXPERIENCE
+ # 14. VIDEO PLAYER EXPERIENCE
 
 This is the most important feature.
 
@@ -444,7 +444,7 @@ The lecture page should feel like a premium LMS rather than YouTube.
 
 Desktop:
 
-```text
+text
 ┌──────────────────────────────────────────────────────┐
 │ ← Physics / Newtonian Mechanics                      │
 ├──────────────────────────────────────────────────────┤
@@ -457,9 +457,9 @@ Desktop:
 │                                                      │
 │ ▶        🔊        1.75x       🔖      Notes         │
 └──────────────────────────────────────────────────────┘
-```
 
-The surrounding FocusLearn interface must not show:
+
+The surrounding ZyntraFocus interface must not show:
 
 * YouTube homepage
 * YouTube Shorts feed
@@ -470,7 +470,7 @@ The surrounding FocusLearn interface must not show:
 
 Only the selected lecture should be presented in the learning interface. # 15. IMPORTANT YOUTUBE COMPLIANCE REQUIREMENT
 
-FocusLearn must use official YouTube embedding mechanisms.
+ZyntraFocus must use official YouTube embedding mechanisms.
 
 Do NOT:
 
@@ -484,13 +484,13 @@ Do NOT:
 
 The application should respect YouTube's current API and embedded-player requirements.
 
-If a video cannot legally/technically be embedded, FocusLearn should display:
+If a video cannot legally/technically be embedded, ZyntraFocus should display:
 
-```text
+text
 This lecture cannot currently be embedded.
 
 Please choose another lecture.
-```
+
 
 Never attempt to bypass the restriction. # 16. PLAYER CONTROLS
 
@@ -511,7 +511,7 @@ The application should not attempt to hide or manipulate YouTube functionality t
 
 Where supported by the official embedded player/API, use:
 
-```text
+text
 0.5x
 0.75x
 1x
@@ -521,21 +521,21 @@ Where supported by the official embedded player/API, use:
 2x
 2.5x
 3x
-``` # 17. REMEMBER PLAYBACK SPEED
+ # 17. REMEMBER PLAYBACK SPEED
 
 Store user's preferred playback speed.
 
 Example:
 
-```text
+text
 Preferred speed: 1.75x
-```
+
 
 When another lecture starts:
 
-```text
+text
 Automatically start at 1.75x
-```
+
 
 User can change it at any time. # 18. RESUME PLAYBACK
 
@@ -543,51 +543,51 @@ Every lecture should remember the user's position.
 
 Example:
 
-```text
+text
 Lecture 04
 Last watched: 02:37:42
-```
+
 
 When reopened:
 
-```text
+text
 Resume from 02:37:42?
 
 [ Resume ] [ Start From Beginning ]
-```
+
 
 Optionally provide:
 
-```text
+text
 Continue automatically
-```
+
 
 in settings. # 19. PROGRESS TRACKING
 
 Track:
 
-```text
+text
 currentPosition
 totalDuration
 percentage
 lastWatchedAt
 watchSessions
 completed
-```
+
 
 Progress percentage:
 
-```text
+text
 currentPosition / totalDuration × 100
-```
+
 
 Do not treat a lecture as completed merely because it was opened.
 
 Default completion threshold:
 
-```text
+text
 >= 90%
-```
+
 
 Admin/system configuration may adjust this later.
 
@@ -597,41 +597,41 @@ Chapter progress should be calculated from lecture completion.
 
 Example:
 
-```text
+text
 Newtonian Mechanics
 
 7 / 10 lectures completed
 
 70%
-```
+
 
 Display:
 
-```text
+text
 ██████████████░░░░░░ 70%
-``` # 21. SUBJECT PROGRESS
+ # 21. SUBJECT PROGRESS
 
 Subject progress should be calculated from the chapters/lectures beneath it.
 
 Example:
 
-```text
+text
 Physics
 
 Completed: 42 / 70 lectures
 
 60%
-``` # 22. LECTURE STATUS
+ # 22. LECTURE STATUS
 
 Every lecture should visually indicate:
 
-```text
+text
 ○ Not Started
 
 ◐ In Progress
 
 ✓ Completed
-```
+
 
 Use accessible icons + text rather than color alone. # 23. TIMESTAMPED NOTES
 
@@ -639,23 +639,23 @@ This is a core feature.
 
 While watching:
 
-```text
+text
 [ + Add Note ]
-```
+
 
 When clicked:
 
-```text
+text
 Timestamp: 01:42:17
 
 Write your note...
 
 [ Save Note ]
-```
+
 
 Save:
 
-```text
+text
 noteId
 userId
 lectureId
@@ -663,85 +663,85 @@ timestamp
 content
 createdAt
 updatedAt
-```
+
 
 Clicking a note should seek the player to that timestamp where supported.
 
 Example:
 
-```text
+text
 01:42:17
 Important explanation of friction.
-```
+
 
 Click:
 
-```text
+text
 → player jumps to 01:42:17
-``` # 24. BOOKMARKS
+ # 24. BOOKMARKS
 
 User can bookmark any moment.
 
 Button:
 
-```text
+text
 🔖 Bookmark
-```
+
 
 Example:
 
-```text
+text
 01:24:31 — Important Concept
 
 02:17:45 — Exam Question
 
 03:05:12 — Must Revise
-```
+
 
 Bookmark fields:
 
-```text
+text
 id
 userId
 lectureId
 timestamp
 label
 createdAt
-``` # 25. IMPORTANT MOMENTS
+ # 25. IMPORTANT MOMENTS
 
 User can categorize bookmarks.
 
 Categories:
 
-```text
+text
 Important
 Formula
 Exam Question
 Confusing
 Revision
 Example
-```
+
 
 This will make revision much easier. # 26. MY NOTES PAGE
 
 Dedicated page:
 
-```text
+text
 My Notes
-```
+
 
 Filters:
 
-```text
+text
 All
 Physics
 Chemistry
 Math
-```
+
 
 Each note:
 
-```text
+text
 Physics
 Newtonian Mechanics
 
@@ -750,15 +750,15 @@ Newtonian Mechanics
 Important explanation...
 
 [ Jump to Lecture ]
-```
+
 
 Search notes by keyword. # 27. BOOKMARKS PAGE
 
 Dedicated page:
 
-```text
+text
 My Bookmarks
-```
+
 
 Filter by:
 
@@ -783,7 +783,7 @@ Hide:
 
 Keep only:
 
-```text
+text
 Lecture title
 
 Video
@@ -791,17 +791,17 @@ Video
 Essential player controls
 
 Minimal progress indicator
-```
+
 
 Focus Mode should support fullscreen where browser/player capabilities allow.
 
 Exit:
 
-```text
+text
 [ Exit Focus Mode ]
-``` # 29. STUDY TIMER
+ # 29. STUDY TIMER
 
-FocusLearn should have an optional study timer.
+ZyntraFocus should have an optional study timer.
 
 Modes:
 
@@ -809,75 +809,75 @@ Modes:
 
 User chooses:
 
-```text
+text
 30 min
 45 min
 50 min
 60 min
 90 min
 Custom
-```
+
 
 ### Pomodoro
 
 Default:
 
-```text
+text
 50 min Study
 5 min Break
-```
+
 
 When study session starts:
 
-```text
+text
 Focus Session
 
 49:32
-```
+
 
 The timer should not force the user to stop watching unless the user enables automatic pause. # 30. BREAK REMINDER
 
 After configurable continuous study:
 
-```text
+text
 You've been studying for 50 minutes.
 
 Give your eyes a short break.
 
 [ Start Break ]
 [ Continue Studying ]
-```
+
 
 Default:
 
-```text
+text
 Study: 50 minutes
 Break: 5 minutes
-```
+
 
 This is a user setting. # 31. DAILY STUDY GOAL
 
 User chooses:
 
-```text
+text
 Daily Goal: 6 hours
-```
+
 
 Dashboard:
 
-```text
+text
 Today's Progress
 
 4h 32m / 6h
 
 75%
-```
+
 
 When complete:
 
-```text
+text
 🎉 Daily Goal Completed
-```
+
 
 Do not make the system overly gamified.
 
@@ -887,29 +887,29 @@ Analytics page should include:
 
 ### Today
 
-```text
+text
 4h 32m
-```
+
 
 ### This Week
 
-```text
+text
 28h 41m
-```
+
 
 ### This Month
 
-```text
+text
 112h 18m
-```
+
 
 ### Subject Distribution
 
-```text
+text
 Physics          42%
 Chemistry        25%
 Higher Math      33%
-```
+
 
 ### Daily Activity
 
@@ -917,7 +917,7 @@ Show a simple weekly chart. # 33. STUDY SESSION MODEL
 
 Each study session should record:
 
-```text
+text
 sessionId
 userId
 lectureId
@@ -926,7 +926,7 @@ chapterId
 startedAt
 endedAt
 duration
-```
+
 
 Use sessions to calculate analytics.
 
@@ -938,15 +938,15 @@ Track consecutive days where the user reaches a configurable minimum study durat
 
 Example:
 
-```text
+text
 🔥 12 Day Streak
-```
+
 
 Default minimum:
 
-```text
+text
 30 minutes/day
-```
+
 
 Allow configuration later. # 35. PERSONAL STUDY PLAN
 
@@ -954,14 +954,14 @@ User can create a study plan.
 
 Example:
 
-```text
+text
 Physics
 
 ☑ Vector
 ☑ Newtonian Mechanics
 ☐ Work Energy Power
 ☐ Gravitation
-```
+
 
 A plan can contain:
 
@@ -974,22 +974,22 @@ A plan can contain:
 
 Users can mark chapters/topics:
 
-```text
+text
 🔴 Weak
 🟡 Needs Practice
 🟢 Strong
-```
+
 
 Example:
 
-```text
+text
 Physics
 
 🔴 Friction
 🔴 Circular Motion
 🟡 Projectile Motion
 🟢 Vector
-```
+
 
 Weak topics should appear on Dashboard. # 37. REVISION MODE
 
@@ -1004,7 +1004,7 @@ Revision Mode gathers:
 
 Example:
 
-```text
+text
 Newtonian Mechanics — Revision
 
 🔖 04:23
@@ -1018,7 +1018,7 @@ Important example
 
 🔴 Weak Topic
 Circular Motion
-```
+
 
 One click should jump to the relevant lecture/timestamp. # 38. IMPORTANT LECTURES
 
@@ -1026,9 +1026,9 @@ Admin can mark lectures as important.
 
 Users can filter:
 
-```text
+text
 ⭐ Important Lectures
-```
+
 
 Useful for exam revision. # 39. RESOURCE SYSTEM
 
@@ -1036,14 +1036,14 @@ Each chapter may contain resources.
 
 Types:
 
-```text
+text
 PDF
 Image
 Formula Sheet
 Question Bank
 External Resource
 Personal Resource
-```
+
 
 The platform must only host files that the administrator/user has the right to store and distribute. # 40. SEARCH
 
@@ -1059,13 +1059,13 @@ Example:
 
 Search:
 
-```text
+text
 friction
-```
+
 
 Results:
 
-```text
+text
 Physics
 Newtonian Mechanics
 
@@ -1076,11 +1076,11 @@ Note:
 
 Bookmark:
 "Coefficient of friction..."
-``` # 41. ADMIN DASHBOARD
+ # 41. ADMIN DASHBOARD
 
 Admin homepage:
 
-```text
+text
 Admin Dashboard
 
 Subjects: 5
@@ -1089,7 +1089,7 @@ Lectures: 384
 Broken Videos: 3
 
 Users: 1
-``` # 42. ADMIN SUBJECT MANAGEMENT
+ # 42. ADMIN SUBJECT MANAGEMENT
 
 Admin can:
 
@@ -1101,7 +1101,7 @@ Admin can:
 
 Subject editor:
 
-```text
+text
 Name
 Description
 Icon
@@ -1109,11 +1109,11 @@ Cover
 Order
 
 [ Save ]
-``` # 43. ADMIN CHAPTER MANAGEMENT
+ # 43. ADMIN CHAPTER MANAGEMENT
 
 Inside a subject:
 
-```text
+text
 Physics
 
 01. Vector
@@ -1121,48 +1121,48 @@ Physics
 03. Work Energy Power
 
 [ + Add Chapter ]
-```
+
 
 Drag-and-drop reordering. # 44. ADMIN LECTURE MANAGEMENT
 
 Inside a chapter:
 
-```text
+text
 Lecture 01
 Lecture 02
 Lecture 03
 Lecture 04
-```
+
 
 Actions:
 
-```text
+text
 Edit
 Move
 Duplicate metadata
 Delete
 Check availability
-``` # 45. BROKEN VIDEO MONITORING
+ # 45. BROKEN VIDEO MONITORING
 
 Admin dashboard should show:
 
-```text
+text
 Video Health
 
 ✓ 381 Available
 ⚠ 3 Unavailable
-```
+
 
 Possible statuses:
 
-```text
+text
 available
 unavailable
 private
 not_embeddable
 deleted
 unknown
-```
+
 
 Never attempt to bypass unavailable/private restrictions. # 46. RESPONSIVE DESIGN
 
@@ -1185,13 +1185,13 @@ Video should remain responsive. # 47. MOBILE NAVIGATION
 
 Recommended:
 
-```text
+text
 Home
 Subjects
 Progress
 Notes
 Profile
-```
+
 
 Keep the interface minimal. # 48. PWA
 
@@ -1213,11 +1213,11 @@ Dark/low-distraction theme.
 
 Support:
 
-```text
+text
 Dark
 Light
 System
-```
+
 
 Dark mode should not mean pure black everywhere.
 
@@ -1247,7 +1247,7 @@ Use:
 
 Suggested:
 
-```text
+text
 Background:
 #0B0F14
 
@@ -1274,7 +1274,7 @@ Text:
 
 Secondary Text:
 #94A3B8
-```
+
 
 Allow theme customization later. # 52. TYPOGRAPHY
 
@@ -1282,15 +1282,15 @@ Use a highly readable modern font.
 
 Recommended:
 
-```text
+text
 Inter
-```
+
 
 For Bengali support:
 
-```text
+text
 Noto Sans Bengali
-```
+
 
 The interface must support Bangla and English text correctly. # 53. ANIMATION
 
@@ -1321,18 +1321,18 @@ Requirements:
 
 Use:
 
-```text
+text
 Firebase Authentication
 Cloud Firestore
 Firebase Storage
 Firebase App Check where appropriate
-```
+
 
 Do not create unnecessary backend complexity for V1. # 56. FIRESTORE DATA MODEL
 
 Recommended structure:
 
-```text
+text
 users/{userId}
 
 subjects/{subjectId}
@@ -1352,9 +1352,9 @@ users/{userId}/studySessions/{sessionId}
 users/{userId}/settings/preferences
 
 users/{userId}/plans/{planId}
-``` # 57. USER DOCUMENT
+ # 57. USER DOCUMENT
 
-```text
+text
 {
   uid,
   displayName,
@@ -1367,9 +1367,9 @@ users/{userId}/plans/{planId}
   streak,
   longestStreak
 }
-``` # 58. PROGRESS DOCUMENT
+ # 58. PROGRESS DOCUMENT
 
-```text
+text
 {
   lectureId,
   currentPosition,
@@ -1379,9 +1379,9 @@ users/{userId}/plans/{planId}
   lastWatchedAt,
   totalWatchTime
 }
-``` # 59. NOTE DOCUMENT
+ # 59. NOTE DOCUMENT
 
-```text
+text
 {
   lectureId,
   subjectId,
@@ -1392,9 +1392,9 @@ users/{userId}/plans/{planId}
   createdAt,
   updatedAt
 }
-``` # 60. BOOKMARK DOCUMENT
+ # 60. BOOKMARK DOCUMENT
 
-```text
+text
 {
   lectureId,
   subjectId,
@@ -1404,9 +1404,9 @@ users/{userId}/plans/{planId}
   category,
   createdAt
 }
-``` # 61. STUDY SESSION DOCUMENT
+ # 61. STUDY SESSION DOCUMENT
 
-```text
+text
 {
   lectureId,
   subjectId,
@@ -1416,7 +1416,7 @@ users/{userId}/plans/{planId}
   duration,
   source
 }
-``` # 62. SECURITY
+ # 62. SECURITY
 
 Firebase Security Rules must enforce:
 
@@ -1452,11 +1452,11 @@ But should NOT attempt to cache YouTube video streams.
 
 If offline:
 
-```text
+text
 You're offline.
 
 Previously loaded course information may still be available, but video playback requires an internet connection.
-``` # 64. ERROR HANDLING
+ # 64. ERROR HANDLING
 
 Every error must have a human-readable message.
 
@@ -1464,30 +1464,30 @@ Examples:
 
 ### Video unavailable
 
-```text
+text
 This lecture is currently unavailable.
-```
+
 
 ### Network error
 
-```text
+text
 Connection lost.
 Please check your internet connection.
-```
+
 
 ### Firebase error
 
-```text
+text
 We couldn't save your progress.
 We'll try again automatically.
-```
+
 
 ### Authentication
 
-```text
+text
 Sign-in failed.
 Please try again.
-```
+
 
 Never expose raw Firebase/API errors to users. # 65. AUTOSAVE
 
@@ -1495,9 +1495,9 @@ Progress should autosave periodically.
 
 Recommended:
 
-```text
+text
 every 10–15 seconds
-```
+
 
 and additionally:
 
@@ -1514,19 +1514,19 @@ Avoid writing progress every second.
 
 Bad:
 
-```text
+text
 write Firestore every 1 second
-```
+
 
 Good:
 
-```text
+text
 local state
 ↓
 periodic batched update
 ↓
 Firestore
-```
+
 
 Use localStorage/session state where appropriate.
 
@@ -1534,7 +1534,7 @@ Only persist meaningful changes. # 67. LOCAL-FIRST PLAYER STATE
 
 During playback:
 
-```text
+text
 Player
  ↓
 Local State
@@ -1542,19 +1542,19 @@ Local State
 Periodic Sync
  ↓
 Firestore
-```
+
 
 This minimizes database writes.
 
 If the user temporarily loses internet:
 
-```text
+text
 Local progress
  ↓
 Reconnect
  ↓
 Sync
-``` # 68. PERFORMANCE
+ # 68. PERFORMANCE
 
 Requirements:
 
@@ -1578,9 +1578,9 @@ Do not place privileged credentials inside the frontend repository. # 70. NETLIF
 
 Deployment target:
 
-```text
+text
 Netlify
-```
+
 
 Required:
 
@@ -1593,31 +1593,31 @@ Required:
 
 Environment variables should include:
 
-```text
+text
 Firebase configuration
 YouTube API configuration
-```
+
 
 Do not commit secrets into Git. # 71. PROJECT ARCHITECTURE
 
 Recommended stack:
 
-```text
+text
 React
 TypeScript
 Vite
 Tailwind CSS
 Firebase
 YouTube IFrame Player API
-```
+
 
 Optional:
 
-```text
+text
 Lucide Icons
 Recharts
 React Router
-```
+
 
 Avoid unnecessary libraries. # 72. CODE QUALITY
 
@@ -1632,7 +1632,7 @@ Claude should produce:
 * Proper error handling
 * Environment-based configuration # 73. RECOMMENDED FOLDER STRUCTURE
 
-```text
+text
 src/
 
 components/
@@ -1675,9 +1675,9 @@ utils/
 contexts/
 
 styles/
-``` # 74. VIDEO PAGE COMPONENT STRUCTURE
+ # 74. VIDEO PAGE COMPONENT STRUCTURE
 
-```text
+text
 LecturePage
 │
 ├── Breadcrumb
@@ -1695,41 +1695,41 @@ LecturePage
 ├── BookmarkPanel
 │
 └── NextLectureCard
-``` # 75. LECTURE PAGE UX
+ # 75. LECTURE PAGE UX
 
 At the top:
 
-```text
+text
 Physics
 /
 Newtonian Mechanics
 
 Lecture 04 — Friction
-```
+
 
 Video.
 
 Below video:
 
-```text
+text
 72% completed
 
 [ 🔖 Bookmark ] [ 📝 Add Note ] [ 🎯 Focus Mode ]
-```
+
 
 Then:
 
-```text
+text
 Notes
 Bookmarks
 Overview
-```
+
 
 Tabs can be used on desktop. # 76. NO AUTOPLAY RABBIT HOLE
 
 After lecture completion:
 
-```text
+text
 ✓ Lecture Completed
 
 Next Lecture
@@ -1737,7 +1737,7 @@ Next Lecture
 Lecture 05 — Circular Motion
 
 [ Continue ]
-```
+
 
 Do NOT automatically send users into another content feed.
 
@@ -1745,13 +1745,13 @@ The student explicitly chooses what to watch next. # 77. NEXT/PREVIOUS NAVIGATIO
 
 Within a chapter:
 
-```text
+text
 ← Previous Lecture
 
 Lecture 04
 
 Next Lecture →
-```
+
 
 The navigation should remain inside the current chapter.
 
@@ -1759,18 +1759,18 @@ No random recommendation system. # 78. BREADCRUMBS
 
 Always show context:
 
-```text
+text
 HSC 2027
 → Physics
 → Newtonian Mechanics
 → Lecture 04
-```
+
 
 This prevents the user from getting lost. # 79. PERSONALIZATION
 
 User preferences:
 
-```text
+text
 Default playback speed
 Daily study goal
 Preferred theme
@@ -1778,7 +1778,7 @@ Focus mode default
 Break reminder
 Automatic resume
 Reduced motion
-``` # 80. SETTINGS PAGE
+ # 80. SETTINGS PAGE
 
 Sections:
 
@@ -1808,13 +1808,13 @@ Sections:
 
 Global search shortcut:
 
-```text
+text
 Ctrl + K
-```
+
 
 Search overlay:
 
-```text
+text
 Search lectures, chapters, subjects, notes...
 
 Physics
@@ -1823,11 +1823,11 @@ Physics
 
 Notes
   "Coefficient of friction..."
-``` # 82. KEYBOARD SHORTCUTS
+ # 82. KEYBOARD SHORTCUTS
 
 Where technically supported:
 
-```text
+text
 Space     Play/Pause
 ←         Seek backward
 →         Seek forward
@@ -1838,13 +1838,13 @@ N         Next lecture
 P         Previous lecture
 Ctrl+K    Search
 Esc       Close modal / exit focus interface
-```
+
 
 Do not override browser/system shortcuts unnecessarily. # 83. MOBILE EXPERIENCE
 
 Mobile lecture page:
 
-```text
+text
 ← Physics
 
 VIDEO
@@ -1859,17 +1859,17 @@ Lecture 04 — Friction
 
 Notes
 Bookmarks
-```
+
 
 Bottom navigation:
 
-```text
+text
 Home
 Subjects
 Progress
 Notes
 Profile
-``` # 84. EMPTY STATES
+ # 84. EMPTY STATES
 
 Never show blank screens.
 
@@ -1877,70 +1877,70 @@ Example:
 
 ### No Notes
 
-```text
+text
 📝 No notes yet
 
 Take your first note while watching a lecture.
-```
+
 
 ### No Bookmarks
 
-```text
+text
 🔖 No bookmarks yet
 
 Save important moments for revision.
-```
+
 
 ### No Progress
 
-```text
+text
 Start your first lecture.
 Your learning journey will appear here.
-``` # 85. LOADING STATES
+ # 85. LOADING STATES
 
 Use skeleton loaders instead of blank pages.
 
 Examples:
 
-```text
+text
 Subject Card Skeleton
 Lecture Card Skeleton
 Dashboard Skeleton
-``` # 86. TOAST NOTIFICATIONS
+ # 86. TOAST NOTIFICATIONS
 
 Examples:
 
-```text
+text
 ✓ Progress saved
 ✓ Bookmark added
 ✓ Note saved
 ✓ Lecture completed
 ✓ Daily goal completed
-```
+
 
 Errors:
 
-```text
+text
 ⚠ Unable to save. Retrying...
-``` # 87. CONFIRMATION SYSTEM
+ # 87. CONFIRMATION SYSTEM
 
 Destructive actions require confirmation.
 
 Example:
 
-```text
+text
 Delete Lecture?
 
 This will remove the lecture from your curriculum.
 
 [ Cancel ] [ Delete ]
-```
+
 
 Never use browser `alert()` for normal UI. # 88. ADMIN VIDEO IMPORT FLOW
 
 Detailed flow:
 
-```text
+text
 Admin
  ↓
 Select Subject
@@ -1964,22 +1964,22 @@ Preview
 Confirm
  ↓
 Save
-``` # 89. ADMIN DRAG-AND-DROP
+ # 89. ADMIN DRAG-AND-DROP
 
 Allow reordering:
 
-```text
+text
 ☰ Lecture 01
 ☰ Lecture 02
 ☰ Lecture 03
 ☰ Lecture 04
-```
+
 
 Order should persist in Firestore. # 90. BULK IMPORT — FUTURE
 
 Future version may support:
 
-```text
+text
 CSV
 
 Subject
@@ -1987,7 +1987,7 @@ Chapter
 Lecture Title
 YouTube URL
 Order
-```
+
 
 Admin can import multiple lectures.
 
@@ -2039,7 +2039,7 @@ Its job is to help the student study. # 94. MVP FEATURE SET
 
 V1 must include:
 
-```text
+text
 ✓ Firebase Authentication
 ✓ Dashboard
 ✓ Subjects
@@ -2063,11 +2063,11 @@ V1 must include:
 ✓ Responsive design
 ✓ Dark mode
 ✓ Netlify deployment
-``` # 95. V2 FEATURES
+ # 95. V2 FEATURES
 
 After V1 is stable:
 
-```text
+text
 • Revision Mode
 • Weak Topic System
 • Advanced analytics
@@ -2079,11 +2079,11 @@ After V1 is stable:
 • PWA enhancements
 • Offline metadata
 • More advanced keyboard controls
-``` # 96. V3 / FUTURE FEATURES
+ # 96. V3 / FUTURE FEATURES
 
 Potential future:
 
-```text
+text
 • AI study assistant
 • AI-generated quiz from user-provided notes
 • AI revision planner
@@ -2093,20 +2093,20 @@ Potential future:
 • Exam countdown
 • HSC syllabus tracking
 • University admission preparation mode
-```
+
 
 AI features must be added carefully and should not turn the platform into another distraction. # 97. EXAM MODE — FUTURE
 
 Allow the student to set:
 
-```text
+text
 HSC Exam:
 May 2027
-```
+
 
 Dashboard:
 
-```text
+text
 🔥 263 Days Remaining
 
 Syllabus Completion
@@ -2114,13 +2114,13 @@ Syllabus Completion
 
 Study Target
 6h/day
-```
+
 
 This is especially useful for long-term exam preparation. # 98. COURSE COMPLETION
 
 Show:
 
-```text
+text
 Physics
 
 42 / 70 Lectures
@@ -2129,7 +2129,7 @@ Physics
 
 Estimated remaining:
 28h 40m
-```
+
 
 Estimated remaining time can be calculated from remaining lecture duration. # 99. SMART STUDY RECOMMENDATION
 
@@ -2137,7 +2137,7 @@ Do NOT build an addictive recommendation engine.
 
 Instead create a deterministic study queue:
 
-```text
+text
 Continue current lecture
 ↓
 Finish current chapter
@@ -2145,15 +2145,15 @@ Finish current chapter
 Study weak topic
 ↓
 Next planned lecture
-```
+
 
 This keeps the user focused. # 100. “WHAT SHOULD I STUDY NOW?” BUTTON
 
 Dashboard:
 
-```text
+text
 🎯 What should I study now?
-```
+
 
 The system chooses based on:
 
@@ -2176,7 +2176,7 @@ But do not directly clone another company's interface.
 
 Create an original visual identity. # 102. BRAND PERSONALITY
 
-FocusLearn should feel:
+ZyntraFocus should feel:
 
 * Calm
 * Focused
@@ -2195,14 +2195,14 @@ Not:
 
 Aim for:
 
-```text
+text
 Fast initial load
 Fast navigation
 Minimal layout shift
 Responsive interaction
 Smooth video page transitions
 Low Firestore read/write overhead
-```
+
 
 Do not optimize prematurely at the expense of maintainability. # 104. DEVELOPMENT PRINCIPLE
 
@@ -2212,7 +2212,7 @@ Build incrementally.
 
 Recommended sequence:
 
-```text
+text
 Phase 1
 Project foundation
 
@@ -2248,7 +2248,7 @@ Testing
 
 Phase 12
 Deployment
-``` # 105. PHASE 1 — FOUNDATION
+ # 105. PHASE 1 — FOUNDATION
 
 Implement:
 
@@ -2265,9 +2265,9 @@ Implement:
 
 Before moving forward:
 
-```text
+text
 npm run build
-```
+
 
 must succeed. # 106. PHASE 2 — AUTH
 
@@ -2282,20 +2282,20 @@ Implement:
 
 Test:
 
-```text
+text
 Login
 Logout
 Refresh
 Protected route
-``` # 107. PHASE 3 — CURRICULUM
+ # 107. PHASE 3 — CURRICULUM
 
 Implement:
 
-```text
+text
 Subjects
 Chapters
 Lectures
-```
+
 
 Admin CRUD.
 
@@ -2312,14 +2312,14 @@ Implement:
 
 Test:
 
-```text
+text
 Valid video
 Invalid video
 Private video
 Unavailable video
 Non-embeddable video
 Different URL formats
-``` # 109. PHASE 5 — PROGRESS
+ # 109. PHASE 5 — PROGRESS
 
 Implement:
 
@@ -2436,7 +2436,7 @@ Deploy to Netlify.
 
 Production checklist:
 
-```text
+text
 ✓ Environment variables
 ✓ Firebase configuration
 ✓ Firestore rules
@@ -2446,7 +2446,7 @@ Production checklist:
 ✓ Production build
 ✓ Error handling
 ✓ Mobile testing
-``` # 117. ACCEPTANCE CRITERIA
+ # 117. ACCEPTANCE CRITERIA
 
 The product is considered V1 complete when:
 
@@ -2476,7 +2476,7 @@ The product is considered V1 complete when:
 24. Application deploys successfully to Netlify.
 25. No YouTube video is downloaded or re-hosted. # 118. NON-GOALS
 
-FocusLearn is NOT:
+ZyntraFocus is NOT:
 
 * a YouTube clone
 * a video hosting platform
@@ -2492,7 +2492,7 @@ If a feature makes studying easier, faster, more organized, or more measurable, 
 
 The product should optimize:
 
-```text
+text
 Focus
 +
 Consistency
@@ -2502,18 +2502,18 @@ Organization
 Progress
 +
 Revision
-```
+
 
 not:
 
-```text
+text
 Time spent inside the app
-``` # 120. FINAL PRODUCT EXPERIENCE
+ # 120. FINAL PRODUCT EXPERIENCE
 
 The ideal user experience is:
 
-```text
-Open FocusLearn
+text
+Open ZyntraFocus
       ↓
 See today's goal
       ↓
@@ -2536,13 +2536,13 @@ See progress increase
 Take a short break
       ↓
 Continue planned study
-```
+
 
 The application should feel like:
 
 >  “I opened this website to study, and everything here helps me study.” 
 
-That is the core identity of FocusLearn. # 121. MASTER DEVELOPMENT INSTRUCTION FOR CLAUDE
+That is the core identity of ZyntraFocus. # 121. MASTER DEVELOPMENT INSTRUCTION FOR CLAUDE
 
 Claude Sonnet should treat this PRD as the source of truth.
 
@@ -2571,7 +2571,7 @@ Before implementing any feature:
 
 When a requirement conflicts with a platform/API restriction, do NOT bypass the restriction. Instead, implement the closest compliant experience and clearly explain the limitation. # 122. DEFINITION OF SUCCESS
 
-FocusLearn succeeds if a student can study a 6-hour YouTube course over several days while:
+ZyntraFocus succeeds if a student can study a 6-hour YouTube course over several days while:
 
 * never needing to browse YouTube,
 * never losing their position,
@@ -2592,4 +2592,4 @@ into:
 
  “I know exactly what I need to study next.”  # END OF MASTER PRD
 
-FocusLearn is intentionally designed as a  personal, distraction-free learning environment , not as another content-consumption platform.
+ZyntraFocus is intentionally designed as a  personal, distraction-free learning environment , not as another content-consumption platform.

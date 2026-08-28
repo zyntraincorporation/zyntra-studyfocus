@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [seekInterval, setSeekInterval] = useState<5 | 10>(
     userDoc?.seekInterval ?? (DEFAULT_SEEK_INTERVAL as 5 | 10)
   )
+  const [showClock, setShowClock] = useState(userDoc?.showClock ?? true)
   const [isSaving, setIsSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -26,6 +27,7 @@ export default function SettingsPage() {
       preferredSpeed: speed,
       breakReminderMinutes: breakReminder,
       seekInterval,
+      showClock,
     })
     await refreshUserDoc()
     setIsSaving(false)
@@ -156,6 +158,30 @@ export default function SettingsPage() {
               </label>
             ))}
           </div>
+        </div>
+
+        {/* Bangladesh Live Clock Toggle */}
+        <div className="flex items-center justify-between pt-3 border-t border-[#1E2A36]">
+          <div>
+            <label className="text-sm font-medium text-[#F8FAFC]">Bangladesh Time (BST Clock)</label>
+            <p className="text-xs text-[#64748B]">
+              Show real-time distraction-free clock below the video progress bar.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowClock(!showClock)}
+            className={`w-11 h-6 rounded-full transition-colors cursor-pointer relative p-0.5 shrink-0 ${
+              showClock ? 'bg-[#6366F1]' : 'bg-[#1E2A36]'
+            }`}
+            aria-label="Toggle Bangladesh clock"
+          >
+            <div
+              className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                showClock ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
         </div>
       </section>
 

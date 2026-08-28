@@ -416,50 +416,47 @@ export default function ChapterDetailPage() {
             return (
               <div
                 key={l.id}
-                className="group flex items-center gap-3 bg-[#111820] border border-[#1E2A36] rounded-xl p-3 hover:border-[#6366F1]/40 transition-all"
+                className="group flex items-center gap-3 bg-[#111820] border border-[#1E2A36] rounded-xl hover:border-[#6366F1]/40 transition-all overflow-hidden"
               >
-                {/* Number + completion */}
-                <div className="w-8 shrink-0 flex flex-col items-center gap-1">
-                  <span className="text-xs font-mono text-[#475569]">{String(idx + 1).padStart(2, '0')}</span>
-                  {completed ? (
-                    <CheckCircle2 size={14} className="text-[#22C55E]" />
-                  ) : progress > 0 ? (
-                    <div className="w-3 h-3 rounded-full border-2 border-[#6366F1]" />
-                  ) : (
-                    <div className="w-3 h-3 rounded-full border-2 border-[#475569]" />
-                  )}
-                </div>
-
-                {/* Thumbnail */}
-                <img
-                  src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
-                  alt=""
-                  className="w-20 h-12 rounded-lg object-cover shrink-0 bg-[#17202A]"
-                  loading="lazy"
-                />
-
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-[#F8FAFC] truncate">{l.title}</p>
-                    {l.isImportant && <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />}
-                    {hasAtt && <Paperclip size={12} className="text-[#64748B] shrink-0" aria-label="Has attachments" />}
-                    {hasTs && <Clock size={12} className="text-[#64748B] shrink-0" aria-label="Has timestamps" />}
+                {/* Clickable area: number + thumbnail + info → navigate to watch */}
+                <Link
+                  to={buildRoute(ROUTES.WATCH, { lectureId: l.id })}
+                  className="flex items-center gap-3 flex-1 min-w-0 p-3 pr-1"
+                >
+                  {/* Number + completion */}
+                  <div className="w-8 shrink-0 flex flex-col items-center gap-1">
+                    <span className="text-xs font-mono text-[#475569]">{String(idx + 1).padStart(2, '0')}</span>
+                    {completed ? (
+                      <CheckCircle2 size={14} className="text-[#22C55E]" />
+                    ) : progress > 0 ? (
+                      <div className="w-3 h-3 rounded-full border-2 border-[#6366F1]" />
+                    ) : (
+                      <div className="w-3 h-3 rounded-full border-2 border-[#475569]" />
+                    )}
                   </div>
-                  <p className="text-xs text-[#64748B] mt-0.5">{l.channelName} · {l.durationFormatted}</p>
-                </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1">
-                  <Link
-                    to={buildRoute(ROUTES.WATCH, { lectureId: l.id })}
-                    className="p-1.5 rounded-lg text-[#64748B] hover:text-[#818CF8] hover:bg-[#6366F1]/10 transition-colors"
-                    title="Watch"
-                    aria-label="Watch lecture"
-                  >
-                    <Play size={14} />
-                  </Link>
+                  {/* Thumbnail */}
+                  <img
+                    src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
+                    alt=""
+                    className="w-20 h-12 rounded-lg object-cover shrink-0 bg-[#17202A]"
+                    loading="lazy"
+                  />
 
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-[#F8FAFC] truncate">{l.title}</p>
+                      {l.isImportant && <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />}
+                      {hasAtt && <Paperclip size={12} className="text-[#64748B] shrink-0" aria-label="Has attachments" />}
+                      {hasTs && <Clock size={12} className="text-[#64748B] shrink-0" aria-label="Has timestamps" />}
+                    </div>
+                    <p className="text-xs text-[#64748B] mt-0.5">{l.channelName} · {l.durationFormatted}</p>
+                  </div>
+                </Link>
+
+                {/* Actions — separate from click area */}
+                <div className="flex items-center gap-1 pr-3 shrink-0">
                   {/* Document / Slide Button */}
                   {l.slideUrl && (
                     <a
@@ -469,6 +466,7 @@ export default function ChapterDetailPage() {
                       className="p-1.5 rounded-lg text-[#818CF8] hover:text-[#A5B4FC] hover:bg-[#6366F1]/15 transition-colors"
                       title="Open Lecture Slide / PDF"
                       aria-label="Open Lecture Slide"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <FileText size={14} />
                     </a>

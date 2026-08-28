@@ -15,9 +15,9 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   ChevronLeft, CheckCircle2, AlertTriangle, FileText, Bookmark,
-  X, Star, Zap, Play, Pause, Volume2, VolumeX, Maximize, Minimize,
+  X, Star, Zap, Play, Pause, Volume1, Volume2, VolumeX, Maximize, Minimize,
   Gauge, Settings2, SkipBack, SkipForward, Clock, Paperclip,
-  ExternalLink, List,
+  ExternalLink, List, Subtitles, Presentation,
 } from 'lucide-react'
 import { getLecture } from '@/services/curriculum.service'
 import { getProgress, saveProgress, markCompleted } from '@/services/progress.service'
@@ -52,13 +52,34 @@ const PLAYER_ERRORS: Record<number, string> = {
 }
 
 const QUALITY_LABELS: Record<string, string> = {
-  hd1080: '1080p', hd720: '720p', large: '480p',
-  medium: '360p', small: '240p', tiny: '144p', auto: 'Auto',
+  auto: 'Auto',
+  hd1080: '1080p HD',
+  hd720: '720p HD',
+  large: '480p',
+  medium: '360p',
+  small: '240p',
+  tiny: '144p',
 }
+
+const ALL_QUALITIES = ['auto', 'hd1080', 'hd720', 'large', 'medium', 'small', 'tiny']
 
 type SidePanelTab = 'notes' | 'bookmarks' | 'timestamps'
 const NOTE_CATEGORIES: NoteCategory[] = ['important', 'formula', 'exam', 'confusing', 'revision', 'general']
 const BM_CATEGORIES: BookmarkCategory[] = ['important', 'formula', 'exam_question', 'confusing', 'revision', 'example']
+
+// ── Convert any Google Drive share URL → clean embeddable preview URL ─
+function toSlideEmbedUrl(url: string): string {
+  // Already a preview link
+  if (url.includes('/preview')) return url
+  // https://drive.google.com/file/d/FILE_ID/view?...  →  /preview
+  const m = url.match(/\/file\/d\/([^/?#]+)/)
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`
+  // https://drive.google.com/open?id=FILE_ID
+  const m2 = url.match(/[?&]id=([^&]+)/)
+  if (m2) return `https://drive.google.com/file/d/${m2[1]}/preview`
+  // Fallback: return as-is (e.g. already PDF direct)
+  return url
+}
 
 // ── Dropdown popup ────────────────────────────────────────────────────
 function ControlDropdown({
@@ -94,6 +115,27 @@ export default function WatchPage() {
 
   // Configurable seek interval (from user settings, default 10s)
   const seekInterval: 5 | 10 = userDoc?.seekInterval ?? (DEFAULT_SEEK_INTERVAL as 5 | 10)
+  const showClock: boolean = userDoc?.showClock ?? true
+
+  // ── Bangladesh Live Clock (HH:MM AM/PM) ──────────────────────────
+  const [bdTime, setBdTime] = useState('')
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date()
+      const formatted = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Dhaka',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }).format(now)
+      setBdTime(formatted)
+    }
+
+    updateTime()
+    const timer = setInterval(updateTime, 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   // ── Data ──────────────────────────────────────────────────────────
   const [lecture, setLecture] = useState<Lecture | null>(null)
@@ -117,14 +159,36 @@ export default function WatchPage() {
   const [showControls, setShowControls] = useState(true)
 
   // ── Quality ───────────────────────────────────────────────────────
-  const [availableQualities, setAvailableQualities] = useState<string[]>([])
+  const [availableQualities, setAvailableQualities] = useState<string[]>(ALL_QUALITIES)
   const [currentQuality, setCurrentQuality] = useState('auto')
   const [qualityOpen, setQualityOpen] = useState(false)
+
+  // ── Captions / Subtitles ──────────────────────────────────────────
+  const [isCaptionsOn, setIsCaptionsOn] = useState(false)
+
+  // ── HUD Notification State (Volume / Seek / Quality / Speed / CC) ──
+  const [hud, setHud] = useState<{
+    icon: 'volume' | 'volume-low' | 'mute' | 'seek-back' | 'seek-forward' | 'speed' | 'quality' | 'captions'
+    text: string
+    value?: number
+  } | null>(null)
+  const hudTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showHud = useCallback((
+    icon: 'volume' | 'volume-low' | 'mute' | 'seek-back' | 'seek-forward' | 'speed' | 'quality' | 'captions',
+    text: string,
+    value?: number
+  ) => {
+    setHud({ icon, text, value })
+    if (hudTimerRef.current) clearTimeout(hudTimerRef.current)
+    hudTimerRef.current = setTimeout(() => setHud(null), 1500)
+  }, [])
 
   // ── Dropdowns ─────────────────────────────────────────────────────
   const [speedOpen, setSpeedOpen] = useState(false)
   const [attachOpen, setAttachOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [slideModalOpen, setSlideModalOpen] = useState(false)
 
   // ── Side panel ────────────────────────────────────────────────────
   const [panelOpen, setPanelOpen] = useState(false)
@@ -153,6 +217,10 @@ export default function WatchPage() {
   const sessionStartRef = useRef<Date | null>(null)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastClickRef = useRef<{ time: number; xPercent: number } | null>(null)
+  const isCaptionsOnRef = useRef(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const availableTracksRef = useRef<any[]>([])
   const completedFiredRef = useRef(false)
   const lectureRef = useRef<Lecture | null>(null)
   const speedRef = useRef(userDoc?.preferredSpeed ?? 1)
@@ -175,6 +243,39 @@ export default function WatchPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying])
+
+  // ── Update Quality Options ─────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updateQualities = useCallback((p?: any) => {
+    const pl = p || playerRef.current
+    if (!pl) return
+    try {
+      const quals = pl.getAvailableQualityLevels?.()
+      if (Array.isArray(quals) && quals.length > 0) {
+        const filtered = quals.filter((q: string) => q !== 'auto' && q !== 'tiny' && q !== 'small')
+        const list = ['auto', ...quals.filter((q: string) => q !== 'auto')]
+        setAvailableQualities(list)
+
+        // Auto-set highest quality: prefer hd1080, else hd720, else highest available
+        const PREFERRED = ['hd2160', 'hd1440', 'hd1080', 'hd720', 'large', 'medium', 'small']
+        const best = PREFERRED.find(q => filtered.includes(q)) ?? (filtered[0] || 'hd1080')
+        try {
+          pl.setPlaybackQuality?.(best)
+          pl.setPlaybackQualityRange?.(best, best)
+        } catch { /* ignore */ }
+        setCurrentQuality(best)
+      } else {
+        setAvailableQualities(ALL_QUALITIES)
+        try {
+          pl.setPlaybackQuality?.('hd1080')
+          pl.setPlaybackQualityRange?.('hd1080', 'hd1080')
+        } catch { /* ignore */ }
+        setCurrentQuality('hd1080')
+      }
+    } catch {
+      setAvailableQualities(ALL_QUALITIES)
+    }
+  }, [])
 
   // ── Load data ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -216,7 +317,9 @@ export default function WatchPage() {
           iv_load_policy: 3,
           fs: 0,
           disablekb: 1,
-          cc_load_policy: 0,
+          cc_load_policy: 1,
+          cc_lang_pref: 'bn',
+          autohide: 1,
         } as any,
         events: {
           onReady: (e: YT.PlayerEvent) => {
@@ -225,14 +328,33 @@ export default function WatchPage() {
             localDurationRef.current = dur
             setDuration(dur)
             e.target.setPlaybackRate(speedRef.current)
-            const pl = e.target as any
-            const quals = pl.getAvailableQualityLevels?.()
-            if (quals && quals.length > 0) {
-              setAvailableQualities(['auto', ...quals.filter((q: string) => q !== 'auto')])
-              setCurrentQuality(pl.getPlaybackQuality?.() ?? 'auto')
-            }
+            updateQualities(e.target)
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const pl = e.target as any
+              pl.loadModule?.('captions')
+              pl.setOption?.('captions', 'fontSize', -1)
+              pl.setOption?.('captions', 'textAlign', 'center')
+              pl.setOption?.('captions', 'alignment', 'center')
+              pl.setOption?.('captions', 'position', { x: 50, y: 88 })
+              if (!isCaptionsOnRef.current) {
+                pl.setOption?.('captions', 'track', {})
+              }
+            } catch { /* ignore */ }
+          },
+          onApiChange: (e: any) => {
+            try {
+              const tracklist = e?.target?.getOption?.('captions', 'tracklist') || e?.target?.getOption?.('cc', 'tracklist')
+              if (Array.isArray(tracklist) && tracklist.length > 0) {
+                availableTracksRef.current = tracklist
+              }
+            } catch { /* ignore */ }
           },
           onStateChange: handleStateChange,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onPlaybackQualityChange: (e: any) => {
+            if (e?.data) setCurrentQuality(e.data)
+          },
           onPlaybackRateChange: (e: YT.OnPlaybackRateChangeEvent) => setSpeed(e.data),
           onError: (e: YT.OnErrorEvent) => setPlayerError(PLAYER_ERRORS[e.data] ?? 'Playback error.'),
         } as any,
@@ -257,70 +379,6 @@ export default function WatchPage() {
     }
   }, [lecture])  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Keyboard shortcuts ────────────────────────────────────────────
-  // Re-bind when seekInterval changes so ←/→ uses the updated value
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
-
-      if (e.code === 'Space' && !e.repeat) {
-        e.preventDefault()
-        preHoldSpeedRef.current = speedRef.current
-        spaceHoldTimerRef.current = setTimeout(() => {
-          isHoldingSpaceRef.current = true
-          spaceHoldTimerRef.current = null
-          playerRef.current?.setPlaybackRate(2)
-          setSpeed(2)
-        }, 300)
-        return
-      }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); seekByKb(-seekInterval) }
-      if (e.key === 'ArrowRight') { e.preventDefault(); seekByKb(seekInterval) }
-      if (e.key === 'm' || e.key === 'M') toggleMute()
-      if (e.key === 'f' || e.key === 'F') toggleFullscreen()
-      if (e.key === 'Escape') {
-        setPanelOpen(false)
-        setSpeedOpen(false)
-        setQualityOpen(false)
-        setAttachOpen(false)
-        setMoreOpen(false)
-      }
-    }
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
-      if (e.code === 'Space') {
-        if (spaceHoldTimerRef.current !== null) {
-          clearTimeout(spaceHoldTimerRef.current)
-          spaceHoldTimerRef.current = null
-          togglePlay()
-        } else if (isHoldingSpaceRef.current) {
-          isHoldingSpaceRef.current = false
-          const prev = preHoldSpeedRef.current
-          playerRef.current?.setPlaybackRate(prev)
-          setSpeed(prev)
-        }
-      }
-    }
-
-    // Thin wrappers that read seekInterval from closure
-    function seekByKb(delta: number) {
-      const next = Math.max(0, Math.min(localPositionRef.current + delta, localDurationRef.current))
-      playerRef.current?.seekTo(next, true)
-      setCurrentTime(next)
-      localPositionRef.current = next
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('keyup', onKeyUp)
-    }
-  }, [seekInterval]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Fullscreen change ─────────────────────────────────────────────
   useEffect(() => {
     const h = () => setIsFullscreen(!!document.fullscreenElement)
@@ -337,13 +395,13 @@ export default function WatchPage() {
     return () => document.removeEventListener('visibilitychange', h)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Controls auto-hide (active in fullscreen) ─────────────────────
+  // ── Controls auto-hide (active when playing) ─────────────────────
   const showControlsTemporarily = useCallback(() => {
     setShowControls(true)
     if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current)
     controlsTimerRef.current = setTimeout(() => {
-      if (document.fullscreenElement) setShowControls(false)
-    }, 3000)
+      setShowControls(false)
+    }, 2500)
   }, [])
 
   // ── Player state handler ──────────────────────────────────────────
@@ -357,6 +415,7 @@ export default function WatchPage() {
       startPolling()
       startSaving()
       showControlsTemporarily()
+      updateQualities()
     }
     if (s === YTState?.PAUSED) {
       setIsPlaying(false)
@@ -365,13 +424,14 @@ export default function WatchPage() {
     }
     if (s === YTState?.BUFFERING) {
       stopPolling()
+      updateQualities()
     }
     if (s === YTState?.ENDED) {
       setIsPlaying(false)
       setShowControls(true)
       stopPolling(); flushProgress(); endSession()
     }
-  }, [showControlsTemporarily]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showControlsTemporarily, updateQualities]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Polling ───────────────────────────────────────────────────────
   const startPolling = useCallback(() => {
@@ -463,29 +523,42 @@ export default function WatchPage() {
   const togglePlay = useCallback(() => {
     if (!playerRef.current) return
     const s = playerRef.current.getPlayerState()
-    if (s === window.YT?.PlayerState?.PLAYING) playerRef.current.pauseVideo()
-    else playerRef.current.playVideo()
-  }, [])
+    if (s === window.YT?.PlayerState?.PLAYING) {
+      playerRef.current.pauseVideo()
+    } else {
+      playerRef.current.playVideo()
+    }
+    showControlsTemporarily()
+  }, [showControlsTemporarily])
 
   const seekTo = useCallback((seconds: number) => {
     const clamped = Math.max(0, Math.min(seconds, localDurationRef.current))
     playerRef.current?.seekTo(clamped, true)
     setCurrentTime(clamped)
     localPositionRef.current = clamped
+    showControlsTemporarily()
     // Flush progress on seek
     setTimeout(flushProgress, 100)
-  }, [flushProgress])
+  }, [flushProgress, showControlsTemporarily])
 
   const seekBy = useCallback((delta: number) => {
     seekTo(localPositionRef.current + delta)
   }, [seekTo])
 
   const handleVolumeChange = useCallback((val: number) => {
-    playerRef.current?.setVolume(val)
-    setVolume(val)
-    if (val === 0) { playerRef.current?.mute(); setIsMuted(true) }
-    else { playerRef.current?.unMute(); setIsMuted(false) }
-  }, [])
+    const clamped = Math.max(0, Math.min(100, val))
+    playerRef.current?.setVolume(clamped)
+    setVolume(clamped)
+    if (clamped === 0) {
+      playerRef.current?.mute()
+      setIsMuted(true)
+      showHud('mute', 'Muted', 0)
+    } else {
+      playerRef.current?.unMute()
+      setIsMuted(false)
+      showHud(clamped > 50 ? 'volume' : 'volume-low', `${clamped}%`, clamped)
+    }
+  }, [showHud])
 
   const toggleMute = useCallback(() => {
     if (!playerRef.current) return
@@ -495,22 +568,164 @@ export default function WatchPage() {
       const v = volume === 0 ? 80 : volume
       playerRef.current.setVolume(v)
       setVolume(v)
+      showHud(v > 50 ? 'volume' : 'volume-low', `${v}%`, v)
     } else {
       playerRef.current.mute()
       setIsMuted(true)
+      showHud('mute', 'Muted', 0)
     }
-  }, [isMuted, volume])
+  }, [isMuted, volume, showHud])
 
   const handleSpeedSelect = useCallback((s: number) => {
     playerRef.current?.setPlaybackRate(s)
-    setSpeed(s); speedRef.current = s; preHoldSpeedRef.current = s
-    setSpeedOpen(false); setMoreOpen(false)
-  }, [])
+    setSpeed(s)
+    speedRef.current = s
+    preHoldSpeedRef.current = s
+    setSpeedOpen(false)
+    setMoreOpen(false)
+    showHud('speed', `${s}× Speed`)
+  }, [showHud])
 
   const handleQualitySelect = useCallback((q: string) => {
-    ;(playerRef.current as any)?.setPlaybackQuality?.(q)
-    setCurrentQuality(q); setQualityOpen(false); setMoreOpen(false)
-  }, [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = playerRef.current as any
+    if (p) {
+      try {
+        p.setPlaybackQuality?.(q)
+        p.setPlaybackQualityRange?.(q, q)
+        const pos = localPositionRef.current
+        if (pos > 0) {
+          p.seekTo?.(pos, true)
+        }
+      } catch (err) {
+        console.warn('Quality change error:', err)
+      }
+    }
+    setCurrentQuality(q)
+    setQualityOpen(false)
+    setMoreOpen(false)
+    showHud('quality', `Quality: ${QUALITY_LABELS[q] ?? q}`)
+  }, [showHud])
+
+  // Toggle Subtitles / Captions
+  const toggleCaptions = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = playerRef.current as any
+    if (!p) return
+
+    const next = !isCaptionsOnRef.current
+    isCaptionsOnRef.current = next
+    setIsCaptionsOn(next)
+
+    // Send direct postMessage command to YouTube iframe contentWindow
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const postCmd = (func: string, args: any[]) => {
+      try {
+        const iframe = p.getIframe?.()
+        if (iframe?.contentWindow) {
+          iframe.contentWindow.postMessage(JSON.stringify({
+            event: 'command',
+            func,
+            args,
+          }), '*')
+        }
+      } catch { /* ignore */ }
+    }
+
+    try {
+      if (!next) {
+        // TURN OFF CAPTIONS
+        try { p.setOption?.('captions', 'track', {}) } catch { /* ignore */ }
+        try { p.setOption?.('cc', 'track', {}) } catch { /* ignore */ }
+        postCmd('setOption', ['captions', 'track', {}])
+        postCmd('setOption', ['cc', 'track', {}])
+        showHud('captions', 'Captions: OFF')
+      } else {
+        // TURN ON CAPTIONS
+        try { p.loadModule?.('captions') } catch { /* ignore */ }
+        try { p.loadModule?.('cc') } catch { /* ignore */ }
+        postCmd('loadModule', ['captions'])
+
+        const applyTrack = () => {
+          try {
+            const tracklist = p.getOption?.('captions', 'tracklist') ||
+                              p.getOption?.('cc', 'tracklist') ||
+                              availableTracksRef.current
+            
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let trackToSet: any = { languageCode: 'bn' }
+            if (Array.isArray(tracklist) && tracklist.length > 0) {
+              availableTracksRef.current = tracklist
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const preferred = tracklist.find((t: any) => t.languageCode === 'bn' || t.languageCode === 'en') || tracklist[0]
+              trackToSet = preferred
+            }
+
+            p.setOption?.('captions', 'track', trackToSet)
+            p.setOption?.('cc', 'track', trackToSet)
+            p.setOption?.('captions', 'fontSize', -1)
+            p.setOption?.('captions', 'textAlign', 'center')
+            p.setOption?.('captions', 'alignment', 'center')
+            p.setOption?.('captions', 'position', { x: 50, y: 88 })
+            p.setOption?.('captions', 'reload', true)
+
+            postCmd('setOption', ['captions', 'track', trackToSet])
+            postCmd('setOption', ['captions', 'fontSize', -1])
+            postCmd('setOption', ['captions', 'textAlign', 'center'])
+            postCmd('setOption', ['captions', 'alignment', 'center'])
+            postCmd('setOption', ['captions', 'position', { x: 50, y: 88 }])
+            postCmd('setOption', ['captions', 'reload', true])
+          } catch (e) {
+            console.warn(e)
+          }
+        }
+
+        applyTrack()
+        setTimeout(applyTrack, 80)
+        setTimeout(applyTrack, 250)
+        setTimeout(applyTrack, 600)
+        showHud('captions', 'Captions: ON')
+      }
+    } catch (err) {
+      console.warn('Captions toggle error:', err)
+      showHud('captions', next ? 'Captions: ON' : 'Captions: OFF')
+    }
+  }, [showHud])
+
+  // Video container click & double click handler (Facebook style)
+  const handleVideoContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    showControlsTemporarily()
+
+    // If side panel is open, clicking on the video screen closes it!
+    if (panelOpen) {
+      setPanelOpen(false)
+      return
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const xPercent = (x / rect.width) * 100
+    const now = Date.now()
+
+    if (lastClickRef.current && (now - lastClickRef.current.time) < 300) {
+      // Double click detected on left or right third!
+      const prevX = lastClickRef.current.xPercent
+      lastClickRef.current = null
+      if (xPercent < 35 && prevX < 35) {
+        seekBy(-seekInterval)
+        showHud('seek-back', `-${seekInterval}s`)
+        return
+      }
+      if (xPercent > 65 && prevX > 65) {
+        seekBy(seekInterval)
+        showHud('seek-forward', `+${seekInterval}s`)
+        return
+      }
+    }
+
+    lastClickRef.current = { time: now, xPercent }
+    togglePlay()
+  }
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return
@@ -519,21 +734,237 @@ export default function WatchPage() {
   }, [])
 
   const openPanel = useCallback((tab: SidePanelTab) => {
-    setActiveTab(tab); setPanelOpen(true)
+    if (panelOpen && activeTab === tab) {
+      setPanelOpen(false)
+    } else {
+      setActiveTab(tab)
+      setPanelOpen(true)
+    }
     setSpeedOpen(false); setQualityOpen(false); setAttachOpen(false); setMoreOpen(false)
-  }, [])
+  }, [panelOpen, activeTab])
+
+  // ── Unified Keyboard Shortcuts (Rock-solid with Ref) ──────────────
+  const handlersRef = useRef({
+    togglePlay,
+    toggleFullscreen,
+    toggleMute,
+    toggleCaptions,
+    openPanel,
+    lecture,
+    setSlideModalOpen,
+    setPanelOpen,
+    setSpeedOpen,
+    setQualityOpen,
+    setAttachOpen,
+    setMoreOpen,
+    seekInterval,
+    volume,
+    isMuted,
+  })
+
+  useEffect(() => {
+    handlersRef.current = {
+      togglePlay,
+      toggleFullscreen,
+      toggleMute,
+      toggleCaptions,
+      openPanel,
+      lecture,
+      setSlideModalOpen,
+      setPanelOpen,
+      setSpeedOpen,
+      setQualityOpen,
+      setAttachOpen,
+      setMoreOpen,
+      seekInterval,
+      volume,
+      isMuted,
+    }
+  })
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const h = handlersRef.current
+
+      // Space: tap = play/pause, hold 300ms = 2x speed
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault()
+        preHoldSpeedRef.current = speedRef.current
+        spaceHoldTimerRef.current = setTimeout(() => {
+          isHoldingSpaceRef.current = true
+          spaceHoldTimerRef.current = null
+          playerRef.current?.setPlaybackRate(2)
+          setSpeed(2)
+          showHud('speed', '2× Speed')
+        }, 300)
+        return
+      }
+
+      // ↑ Arrow Up = Increase Volume
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        const cur = h.isMuted ? 0 : h.volume
+        const next = Math.min(100, cur + 5)
+        playerRef.current?.unMute()
+        playerRef.current?.setVolume(next)
+        setVolume(next)
+        setIsMuted(false)
+        showHud(next > 50 ? 'volume' : 'volume-low', `${next}%`, next)
+        return
+      }
+
+      // ↓ Arrow Down = Decrease Volume
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        const cur = h.isMuted ? 0 : h.volume
+        const next = Math.max(0, cur - 5)
+        if (next === 0) {
+          playerRef.current?.mute()
+          setIsMuted(true)
+          setVolume(0)
+          showHud('mute', 'Muted', 0)
+        } else {
+          playerRef.current?.unMute()
+          playerRef.current?.setVolume(next)
+          setVolume(next)
+          setIsMuted(false)
+          showHud(next > 50 ? 'volume' : 'volume-low', `${next}%`, next)
+        }
+        return
+      }
+
+      // ← Arrow Left = Rewind
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        const next = Math.max(0, Math.min(localPositionRef.current - h.seekInterval, localDurationRef.current))
+        playerRef.current?.seekTo(next, true)
+        setCurrentTime(next)
+        localPositionRef.current = next
+        showHud('seek-back', `-${h.seekInterval}s`)
+        return
+      }
+
+      // → Arrow Right = Forward
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        const next = Math.max(0, Math.min(localPositionRef.current + h.seekInterval, localDurationRef.current))
+        playerRef.current?.seekTo(next, true)
+        setCurrentTime(next)
+        localPositionRef.current = next
+        showHud('seek-forward', `+${h.seekInterval}s`)
+        return
+      }
+
+      // 'k' or 'K' = Play / Pause
+      if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault()
+        h.togglePlay()
+        return
+      }
+
+      // 'm' or 'M' = Mute / Unmute
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault()
+        h.toggleMute()
+        return
+      }
+
+      // 'f' or 'F' = Fullscreen
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault()
+        h.toggleFullscreen()
+        return
+      }
+
+      // 'c' or 'C' = Captions / Subtitles
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault()
+        h.toggleCaptions()
+        return
+      }
+
+      // 'n' or 'N' = Notes panel
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault()
+        h.openPanel('notes')
+        return
+      }
+
+      // 'b' or 'B' = Bookmarks panel
+      if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault()
+        h.openPanel('bookmarks')
+        return
+      }
+
+      // 't' or 'T' = Timestamps panel
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault()
+        h.openPanel('timestamps')
+        return
+      }
+
+      // 's' or 'S' = Lecture Slide
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault()
+        if (h.lecture?.slideUrl) {
+          setSlideModalOpen(prev => !prev)
+        }
+        return
+      }
+
+      if (e.key === 'Escape') {
+        h.setPanelOpen(false)
+        h.setSlideModalOpen(false)
+        h.setSpeedOpen(false)
+        h.setQualityOpen(false)
+        h.setAttachOpen(false)
+        h.setMoreOpen(false)
+      }
+    }
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.code === 'Space') {
+        if (spaceHoldTimerRef.current !== null) {
+          clearTimeout(spaceHoldTimerRef.current)
+          spaceHoldTimerRef.current = null
+          handlersRef.current.togglePlay()
+        } else if (isHoldingSpaceRef.current) {
+          isHoldingSpaceRef.current = false
+          const prev = preHoldSpeedRef.current
+          playerRef.current?.setPlaybackRate(prev)
+          setSpeed(prev)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [showHud])
 
   // ── Resume ────────────────────────────────────────────────────────
   const handleResume = () => {
     setShowResumeDialog(false)
-    if (savedProgress && isPlayerReady && playerRef.current) {
+    if (savedProgress && playerRef.current) {
       playerRef.current.seekTo(savedProgress.currentPosition, true)
+      setCurrentTime(savedProgress.currentPosition)
+      localPositionRef.current = savedProgress.currentPosition
       playerRef.current.playVideo()
     }
   }
   const handleStartOver = () => {
     setShowResumeDialog(false)
     playerRef.current?.seekTo(0, true)
+    setCurrentTime(0)
+    localPositionRef.current = 0
     playerRef.current?.playVideo()
   }
 
@@ -758,269 +1189,309 @@ export default function WatchPage() {
   // ── Controls bar ──────────────────────────────────────────────────
   const controlsBar = (
     <div
-      className="flex items-center gap-0.5 sm:gap-1 px-2 sm:px-3 pb-1"
+      className="flex items-center justify-between gap-1 sm:gap-3 px-2 sm:px-3 pb-1 w-full select-none"
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {/* ── Rewind ── */}
-      <button
-        onClick={() => seekBy(-seekInterval)}
-        className={`${ctrlBtn} flex-col text-white/70 hover:text-white`}
-        title={`Rewind ${seekInterval}s`}
-        aria-label={`Rewind ${seekInterval} seconds`}
-      >
-        <SkipBack size={18} />
-        <span className="text-[9px] text-white/40 leading-none mt-0.5">{seekInterval}s</span>
-      </button>
+      {/* ── LEFT SECTION: Sound, Video Time & Bangladesh Clock ── */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 flex-1 min-w-0">
+        {/* Volume */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={toggleMute}
+            className={`${ctrlBtn} text-white/70 hover:text-white`}
+            title={effectivelyMuted ? 'Unmute (M)' : 'Mute (M)'}
+            aria-label={effectivelyMuted ? 'Unmute' : 'Mute'}
+          >
+            {effectivelyMuted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+          </button>
+          <input
+            type="range" min={0} max={100}
+            value={effectivelyMuted ? 0 : volume}
+            onChange={(e) => handleVolumeChange(Number(e.target.value))}
+            className="hidden sm:block h-1 appearance-none cursor-pointer rounded-full"
+            style={{
+              width: '60px',
+              background: `linear-gradient(to right, rgba(255,255,255,0.85) ${effectivelyMuted ? 0 : volume}%, rgba(255,255,255,0.15) ${effectivelyMuted ? 0 : volume}%)`,
+            }}
+            aria-label="Volume"
+          />
+        </div>
 
-      {/* ── Play / Pause ── */}
-      <button
-        onClick={togglePlay}
-        className={`${ctrlBtn} text-white hover:text-[#818CF8]`}
-        title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
-      >
-        {isPlaying ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}
-      </button>
+        {/* Elapsed / Duration Time */}
+        <span className="text-xs text-white/60 font-mono shrink-0 tabular-nums">
+          {formatDuration(Math.floor(currentTime))} / {formatDuration(Math.floor(duration))}
+        </span>
 
-      {/* ── Forward ── */}
-      <button
-        onClick={() => seekBy(seekInterval)}
-        className={`${ctrlBtn} flex-col text-white/70 hover:text-white`}
-        title={`Forward ${seekInterval}s`}
-        aria-label={`Forward ${seekInterval} seconds`}
-      >
-        <SkipForward size={18} />
-        <span className="text-[9px] text-white/40 leading-none mt-0.5">{seekInterval}s</span>
-      </button>
-
-      {/* ── Time (hidden on small mobile) ── */}
-      <span className="hidden xs:block text-xs text-white/55 font-mono shrink-0 tabular-nums ml-1">
-        {formatDuration(Math.floor(currentTime))} / {formatDuration(Math.floor(duration))}
-      </span>
-
-      <div className="flex-1" />
-
-      {/* ── Speed (desktop) ── */}
-      <div className="relative hidden sm:block" data-dropdown>
-        <button
-          onClick={() => { setSpeedOpen(!speedOpen); setQualityOpen(false); setMoreOpen(false) }}
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-            speedOpen ? 'bg-[#6366F1] text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
-          }`}
-          title="Playback speed"
-          aria-label={`Speed: ${speed}x`}
-        >
-          <Gauge size={13} />{speed}x
-        </button>
-        <ControlDropdown open={speedOpen} onClose={() => setSpeedOpen(false)}>
-          <div className="px-1 py-1">
-            <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Speed</p>
-            {PLAYBACK_SPEEDS.map((s) => (
-              <button key={s} onClick={() => handleSpeedSelect(s)}
-                className={`w-full text-left px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${
-                  speed === s ? 'bg-[#6366F1]/20 text-[#818CF8] font-semibold' : 'text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC]'
-                }`}
-              >
-                {s === 1 ? '1× (Normal)' : `${s}×`}
-              </button>
-            ))}
-            <div className="border-t border-[#1E2A36] mt-1 pt-1 px-2">
-              <p className="text-[10px] text-[#475569]">Hold Space for 2× · Release to restore</p>
-            </div>
+        {/* Live Bangladesh Time (HH:MM AM/PM) */}
+        {showClock && bdTime && (
+          <div
+            className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#111820] border border-[#1E2A36] text-[11px] font-mono text-[#94A3B8] shadow-sm shrink-0"
+            title="Current Bangladesh Time"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse shrink-0" />
+            <span className="text-[#F8FAFC] font-semibold tracking-tight tabular-nums">{bdTime}</span>
           </div>
-        </ControlDropdown>
+        )}
       </div>
 
-      {/* ── Quality (desktop) ── */}
-      {availableQualities.length > 0 && (
+      {/* ── CENTER SECTION: Focused Navigation (Rewind, Play/Pause, Forward) ── */}
+      <div className="flex items-center justify-center gap-2 sm:gap-4 shrink-0">
+        {/* Rewind */}
+        <button
+          onClick={() => seekBy(-seekInterval)}
+          className="flex flex-col items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full text-white/70 hover:text-white hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+          title={`Rewind ${seekInterval}s (←)`}
+          aria-label={`Rewind ${seekInterval} seconds`}
+        >
+          <SkipBack size={18} />
+          <span className="text-[9px] text-white/50 leading-none mt-0.5">{seekInterval}s</span>
+        </button>
+
+        {/* Center Play / Pause (Primary Anchor) */}
+        <button
+          onClick={togglePlay}
+          className="flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#6366F1] hover:bg-[#4F46E5] text-white active:scale-95 shadow-md shadow-[#6366F1]/30 transition-all cursor-pointer"
+          title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+        >
+          {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
+        </button>
+
+        {/* Forward */}
+        <button
+          onClick={() => seekBy(seekInterval)}
+          className="flex flex-col items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full text-white/70 hover:text-white hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+          title={`Forward ${seekInterval}s (→)`}
+          aria-label={`Forward ${seekInterval} seconds`}
+        >
+          <SkipForward size={18} />
+          <span className="text-[9px] text-white/50 leading-none mt-0.5">{seekInterval}s</span>
+        </button>
+      </div>
+
+      {/* ── RIGHT SECTION: Controls, Tools & Fullscreen ── */}
+      <div className="flex items-center justify-end gap-0.5 sm:gap-1.5 flex-1 min-w-0">
+        {/* Captions / Subtitles Button */}
+        <button
+          onClick={toggleCaptions}
+          className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
+            isCaptionsOn ? 'text-[#818CF8] bg-[#6366F1]/20 font-bold' : 'text-white/70 hover:text-white hover:bg-white/10'
+          }`}
+          title={isCaptionsOn ? 'Disable Subtitles (C)' : 'Enable Subtitles (C)'}
+          aria-label="Subtitles"
+        >
+          <Subtitles size={17} />
+        </button>
+
+        {/* Speed (desktop) */}
         <div className="relative hidden sm:block" data-dropdown>
           <button
-            onClick={() => { setQualityOpen(!qualityOpen); setSpeedOpen(false); setMoreOpen(false) }}
+            onClick={() => { setSpeedOpen(!speedOpen); setQualityOpen(false); setMoreOpen(false) }}
             className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-              qualityOpen ? 'bg-[#6366F1] text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
+              speedOpen ? 'bg-[#6366F1] text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
             }`}
-            title="Video quality"
-            aria-label={`Quality: ${QUALITY_LABELS[currentQuality] ?? currentQuality}`}
+            title="Playback speed"
+            aria-label={`Speed: ${speed}x`}
           >
-            <Settings2 size={13} />{QUALITY_LABELS[currentQuality] ?? currentQuality}
+            <Gauge size={13} />{speed}x
           </button>
-          <ControlDropdown open={qualityOpen} onClose={() => setQualityOpen(false)}>
+          <ControlDropdown open={speedOpen} onClose={() => setSpeedOpen(false)}>
             <div className="px-1 py-1">
-              <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Quality</p>
-              {availableQualities.map((q) => (
-                <button key={q} onClick={() => handleQualitySelect(q)}
+              <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Speed</p>
+              {PLAYBACK_SPEEDS.map((s) => (
+                <button key={s} onClick={() => handleSpeedSelect(s)}
                   className={`w-full text-left px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${
-                    currentQuality === q ? 'bg-[#6366F1]/20 text-[#818CF8] font-semibold' : 'text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC]'
+                    speed === s ? 'bg-[#6366F1]/20 text-[#818CF8] font-semibold' : 'text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC]'
                   }`}
                 >
-                  {QUALITY_LABELS[q] ?? q}
+                  {s === 1 ? '1× (Normal)' : `${s}×`}
                 </button>
               ))}
+              <div className="border-t border-[#1E2A36] mt-1 pt-1 px-2">
+                <p className="text-[10px] text-[#475569]">Hold Space for 2× · Release to restore</p>
+              </div>
             </div>
           </ControlDropdown>
         </div>
-      )}
 
-      {/* ── Volume (mute icon always; slider hidden on mobile) ── */}
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={toggleMute}
-          className={`${ctrlBtn} text-white/70 hover:text-white`}
-          title={effectivelyMuted ? 'Unmute (M)' : 'Mute (M)'}
-          aria-label={effectivelyMuted ? 'Unmute' : 'Mute'}
-        >
-          {effectivelyMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-        </button>
-        <input
-          type="range" min={0} max={100}
-          value={effectivelyMuted ? 0 : volume}
-          onChange={(e) => handleVolumeChange(Number(e.target.value))}
-          className="hidden sm:block h-1 appearance-none cursor-pointer rounded-full"
-          style={{
-            width: '64px',
-            background: `linear-gradient(to right, rgba(255,255,255,0.85) ${effectivelyMuted ? 0 : volume}%, rgba(255,255,255,0.15) ${effectivelyMuted ? 0 : volume}%)`,
-          }}
-          aria-label="Volume"
-        />
-      </div>
-
-      {/* ── Notes button ── */}
-      <button
-        onClick={() => openPanel('notes')}
-        className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
-          panelOpen && activeTab === 'notes' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
-        }`}
-        title="Notes"
-        aria-label="Notes"
-      >
-        <FileText size={16} />
-        <span className="hidden xl:block ml-1">Notes</span>
-      </button>
-
-      {/* ── Bookmarks button ── */}
-      <button
-        onClick={() => openPanel('bookmarks')}
-        className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
-          panelOpen && activeTab === 'bookmarks' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
-        }`}
-        title="Bookmarks"
-        aria-label="Bookmarks"
-      >
-        <Bookmark size={16} />
-        <span className="hidden xl:block ml-1">Marks</span>
-      </button>
-
-      {/* ── Timestamps button (only if timestamps exist) ── */}
-      {hasTimestamps && (
-        <button
-          onClick={() => openPanel('timestamps')}
-          className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
-            panelOpen && activeTab === 'timestamps' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
-          }`}
-          title="Timestamps"
-          aria-label="Timestamps / Chapters"
-        >
-          <List size={16} />
-        </button>
-      )}
-
-      {/* ── Attachments (only if lecture has attachments) ── */}
-      {hasAttachments && (
-        <div className="relative" data-dropdown>
-          <button
-            onClick={() => { setAttachOpen(!attachOpen); setSpeedOpen(false); setQualityOpen(false); setMoreOpen(false) }}
-            className={`${ctrlBtn} px-1.5 rounded-lg ${
-              attachOpen ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}
-            title="Attachments"
-            aria-label="Attachments"
-          >
-            <Paperclip size={16} />
-          </button>
-          <ControlDropdown open={attachOpen} onClose={() => setAttachOpen(false)}>
-            <div className="px-1 py-1">
-              <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Attachments</p>
-              {lecture.slideUrl && (
-                <a
-                  href={lecture.slideUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setAttachOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#818CF8] bg-[#6366F1]/10 hover:bg-[#6366F1]/20 font-medium transition-colors mb-0.5"
-                >
-                  <FileText size={12} className="shrink-0" />
-                  <span className="truncate max-w-[180px]">Lecture Slide</span>
-                  <ExternalLink size={11} className="shrink-0 opacity-70 ml-auto" />
-                </a>
-              )}
-              {lecture.attachments?.map((att) => (
-                <a
-                  key={att.id}
-                  href={att.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setAttachOpen(false)}
-                  className="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC] transition-colors"
-                >
-                  <Paperclip size={12} className="shrink-0" />
-                  <span className="truncate max-w-[180px]">{att.title}</span>
-                  <ExternalLink size={11} className="shrink-0 opacity-50 ml-auto" />
-                </a>
-              ))}
-            </div>
-          </ControlDropdown>
-        </div>
-      )}
-
-      {/* ── More menu (mobile only: speed + quality) ── */}
-      <div className="relative sm:hidden" data-dropdown>
-        <button
-          onClick={() => { setMoreOpen(!moreOpen); setAttachOpen(false) }}
-          className={`${ctrlBtn} px-1.5 rounded-lg ${
-            moreOpen ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
-          }`}
-          title="More options"
-          aria-label="More options"
-        >
-          <Settings2 size={16} />
-        </button>
-        <ControlDropdown open={moreOpen} onClose={() => setMoreOpen(false)}>
-          <div className="px-1 py-1">
-            <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Speed</p>
-            {PLAYBACK_SPEEDS.map((s) => (
-              <button key={s} onClick={() => handleSpeedSelect(s)}
-                className={`w-full text-left px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${
-                  speed === s ? 'bg-[#6366F1]/20 text-[#818CF8] font-semibold' : 'text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC]'
-                }`}
-              >{s === 1 ? '1× (Normal)' : `${s}×`}</button>
-            ))}
-            {availableQualities.length > 0 && (
-              <>
-                <div className="border-t border-[#1E2A36] my-1" />
+        {/* Quality (desktop) */}
+        {availableQualities.length > 0 && (
+          <div className="relative hidden sm:block" data-dropdown>
+            <button
+              onClick={() => { setQualityOpen(!qualityOpen); setSpeedOpen(false); setMoreOpen(false) }}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                qualityOpen ? 'bg-[#6366F1] text-white' : 'text-white/70 hover:text-white hover:bg-white/10'
+              }`}
+              title="Video quality"
+              aria-label={`Quality: ${QUALITY_LABELS[currentQuality] ?? currentQuality}`}
+            >
+              <Settings2 size={13} />{QUALITY_LABELS[currentQuality] ?? currentQuality}
+            </button>
+            <ControlDropdown open={qualityOpen} onClose={() => setQualityOpen(false)}>
+              <div className="px-1 py-1">
                 <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Quality</p>
                 {availableQualities.map((q) => (
                   <button key={q} onClick={() => handleQualitySelect(q)}
                     className={`w-full text-left px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${
                       currentQuality === q ? 'bg-[#6366F1]/20 text-[#818CF8] font-semibold' : 'text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC]'
                     }`}
-                  >{QUALITY_LABELS[q] ?? q}</button>
+                  >
+                    {QUALITY_LABELS[q] ?? q}
+                  </button>
                 ))}
-              </>
-            )}
+              </div>
+            </ControlDropdown>
           </div>
-        </ControlDropdown>
-      </div>
+        )}
 
-      {/* ── Fullscreen ── */}
-      <button
-        onClick={toggleFullscreen}
-        className={`${ctrlBtn} text-white/70 hover:text-white`}
-        title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
-        aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-      >
-        {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
-      </button>
+        {/* Notes */}
+        <button
+          onClick={() => openPanel('notes')}
+          className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
+            panelOpen && activeTab === 'notes' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
+          }`}
+          title="Notes (N)"
+          aria-label="Notes (N)"
+        >
+          <FileText size={16} />
+          <span className="hidden xl:block ml-1">Notes</span>
+        </button>
+
+        {/* Bookmarks */}
+        <button
+          onClick={() => openPanel('bookmarks')}
+          className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
+            panelOpen && activeTab === 'bookmarks' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
+          }`}
+          title="Bookmarks (B)"
+          aria-label="Bookmarks (B)"
+        >
+          <Bookmark size={16} />
+          <span className="hidden xl:block ml-1">Marks</span>
+        </button>
+
+        {/* Timestamps */}
+        {hasTimestamps && (
+          <button
+            onClick={() => openPanel('timestamps')}
+            className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
+              panelOpen && activeTab === 'timestamps' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+            title="Timestamps (T)"
+            aria-label="Timestamps / Chapters (T)"
+          >
+            <List size={16} />
+          </button>
+        )}
+
+        {/* Dedicated Lecture Slide Button */}
+        {lecture.slideUrl && (
+          <button
+            onClick={() => setSlideModalOpen(true)}
+            className={`${ctrlBtn} px-1.5 rounded-lg text-xs text-[#818CF8] bg-[#6366F1]/10 hover:text-white hover:bg-[#6366F1]/20 font-medium transition-colors`}
+            title="Lecture Slide (S)"
+            aria-label="Lecture Slide (S)"
+          >
+            <Presentation size={16} />
+            <span className="hidden xl:block ml-1">Slide</span>
+          </button>
+        )}
+
+        {/* Attachments */}
+        {hasAttachments && (
+          <div className="relative" data-dropdown>
+            <button
+              onClick={() => { setAttachOpen(!attachOpen); setSpeedOpen(false); setQualityOpen(false); setMoreOpen(false) }}
+              className={`${ctrlBtn} px-1.5 rounded-lg ${
+                attachOpen ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
+              }`}
+              title="Attachments"
+              aria-label="Attachments"
+            >
+              <Paperclip size={16} />
+            </button>
+            <ControlDropdown open={attachOpen} onClose={() => setAttachOpen(false)}>
+              <div className="px-1 py-1">
+                <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Attachments</p>
+                {lecture.slideUrl && (
+                  <button
+                    onClick={() => { setAttachOpen(false); setSlideModalOpen(true) }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#818CF8] bg-[#6366F1]/10 hover:bg-[#6366F1]/20 font-medium transition-colors mb-0.5 cursor-pointer"
+                  >
+                    <FileText size={12} className="shrink-0" />
+                    <span className="truncate max-w-[180px]">Lecture Slide</span>
+                    <span className="ml-auto text-[9px] bg-[#6366F1]/20 text-[#818CF8] px-1.5 py-0.5 rounded font-semibold">VIEW</span>
+                  </button>
+                )}
+                {lecture.attachments?.map((att) => (
+                  <a
+                    key={att.id}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setAttachOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC] transition-colors"
+                  >
+                    <Paperclip size={12} className="shrink-0" />
+                    <span className="truncate max-w-[180px]">{att.title}</span>
+                    <ExternalLink size={11} className="shrink-0 opacity-50 ml-auto" />
+                  </a>
+                ))}
+              </div>
+            </ControlDropdown>
+          </div>
+        )}
+
+        {/* Mobile More menu (speed + quality) */}
+        <div className="relative sm:hidden" data-dropdown>
+          <button
+            onClick={() => { setMoreOpen(!moreOpen); setAttachOpen(false) }}
+            className={`${ctrlBtn} px-1.5 rounded-lg ${
+              moreOpen ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+            title="More options"
+            aria-label="More options"
+          >
+            <Settings2 size={16} />
+          </button>
+          <ControlDropdown open={moreOpen} onClose={() => setMoreOpen(false)}>
+            <div className="px-1 py-1">
+              <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Speed</p>
+              {PLAYBACK_SPEEDS.map((s) => (
+                <button key={s} onClick={() => handleSpeedSelect(s)}
+                  className={`w-full text-left px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${
+                    speed === s ? 'bg-[#6366F1]/20 text-[#818CF8] font-semibold' : 'text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC]'
+                  }`}
+                >{s === 1 ? '1× (Normal)' : `${s}×`}</button>
+              ))}
+              {availableQualities.length > 0 && (
+                <>
+                  <div className="border-t border-[#1E2A36] my-1" />
+                  <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Quality</p>
+                  {availableQualities.map((q) => (
+                    <button key={q} onClick={() => handleQualitySelect(q)}
+                      className={`w-full text-left px-3 py-1.5 text-xs rounded-lg cursor-pointer transition-colors ${
+                        currentQuality === q ? 'bg-[#6366F1]/20 text-[#818CF8] font-semibold' : 'text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC]'
+                      }`}
+                    >{QUALITY_LABELS[q] ?? q}</button>
+                  ))}
+                </>
+              )}
+            </div>
+          </ControlDropdown>
+        </div>
+
+        {/* Fullscreen */}
+        <button
+          onClick={toggleFullscreen}
+          className={`${ctrlBtn} text-white/70 hover:text-white`}
+          title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+          aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        >
+          {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+        </button>
+      </div>
     </div>
   )
 
@@ -1055,7 +1526,7 @@ export default function WatchPage() {
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* ── Video + controls column ── */}
-        <div className={`flex flex-col min-w-0 ${panelOpen && !isFullscreen ? 'flex-1' : 'w-full'}`}>
+        <div className="flex flex-col min-w-0 w-full">
 
           {playerError ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center px-4 py-12">
@@ -1069,27 +1540,74 @@ export default function WatchPage() {
             <>
               {/* ── Video area ── */}
               <div
-                className={`relative bg-black ${isFullscreen ? 'flex-1' : ''}`}
+                className={`relative bg-black group overflow-hidden select-none ${isFullscreen ? 'flex-1' : ''}`}
                 style={isFullscreen ? undefined : { aspectRatio: '16/9' }}
-                onMouseMove={isFullscreen ? showControlsTemporarily : undefined}
-                onTouchStart={isFullscreen ? showControlsTemporarily : undefined}
-                onMouseLeave={() => isFullscreen && isPlaying && setShowControls(false)}
+                onMouseMove={showControlsTemporarily}
+                onTouchStart={showControlsTemporarily}
+                onMouseLeave={() => isPlaying && setShowControls(false)}
               >
-                {/* YouTube iframe */}
+                {/* YouTube iframe (exact original 1:1 ratio) */}
                 <div
                   ref={playerDivRef}
                   id="yt-player"
-                  className="absolute inset-0 w-full h-full"
+                  className="absolute inset-0 w-full h-full pointer-events-none"
                   style={{ pointerEvents: 'none' }}
                 />
 
-                {/* Click-to-play overlay — explicit pointer target */}
+                {/* Video backdrop target with single-click play/pause & double-click seek (Facebook style) */}
                 <div
-                  className="absolute inset-0 cursor-pointer"
-                  onClick={togglePlay}
+                  className="absolute inset-0 z-10 cursor-pointer"
+                  onClick={handleVideoContainerClick}
                   aria-label={isPlaying ? 'Pause' : 'Play'}
                   role="button"
                 />
+
+                {/* ── Center Controls Overlay (Transparent Play/Pause Icon) ── */}
+                <div
+                  className={`absolute inset-0 flex items-center justify-center pointer-events-none transition-all duration-300 z-20 ${
+                    (!isPlaying || showControls) ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                  }`}
+                >
+                  {/* Transparent Center Play / Pause Icon (No Background) */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      togglePlay()
+                    }}
+                    className="pointer-events-auto text-white/90 hover:text-white hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer drop-shadow-[0_4px_16px_rgba(0,0,0,0.8)] filter p-3 rounded-full"
+                    title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+                    aria-label={isPlaying ? 'Pause' : 'Play'}
+                  >
+                    {isPlaying ? (
+                      <Pause size={56} fill="currentColor" />
+                    ) : (
+                      <Play size={60} fill="currentColor" className="ml-1" />
+                    )}
+                  </button>
+                </div>
+
+                {/* ── Top-Center HUD Toast (Volume / Seek / Quality / Speed) ── */}
+                {hud && (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-full flex items-center gap-2.5 shadow-2xl z-40 pointer-events-none animate-fade-in text-xs sm:text-sm font-semibold">
+                    {hud.icon === 'volume' && <Volume2 size={16} className="text-[#818CF8]" />}
+                    {hud.icon === 'volume-low' && <Volume1 size={16} className="text-[#818CF8]" />}
+                    {hud.icon === 'mute' && <VolumeX size={16} className="text-[#EF4444]" />}
+                    {hud.icon === 'seek-back' && <SkipBack size={16} className="text-[#818CF8]" />}
+                    {hud.icon === 'seek-forward' && <SkipForward size={16} className="text-[#818CF8]" />}
+                    {hud.icon === 'quality' && <Settings2 size={16} className="text-[#818CF8]" />}
+                    {hud.icon === 'speed' && <Gauge size={16} className="text-[#818CF8]" />}
+                    {hud.icon === 'captions' && <Subtitles size={16} className="text-[#818CF8]" />}
+                    <span>{hud.text}</span>
+                    {typeof hud.value === 'number' && (
+                      <div className="w-14 sm:w-20 h-1.5 bg-white/20 rounded-full overflow-hidden ml-1">
+                        <div
+                          className="h-full bg-[#6366F1] rounded-full transition-all duration-150"
+                          style={{ width: `${hud.value}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Completed badge */}
                 {isCompleted && (
@@ -1105,10 +1623,51 @@ export default function WatchPage() {
                   </div>
                 )}
 
+                {/* ── Persistent Floating Live Clock in Fullscreen ── */}
+                {isFullscreen && showClock && bdTime && (
+                  <div className="absolute top-3.5 right-4 z-35 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-mono text-white/90 border border-white/10 shadow-lg pointer-events-none flex items-center gap-1.5 select-none">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse shrink-0" />
+                    <span className="font-semibold tracking-tight tabular-nums">{bdTime}</span>
+                  </div>
+                )}
+
+                {/* ── Slidable Drawer Tab Button (< / >) on Right Edge ── */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!panelOpen) {
+                      if (hasTimestamps) setActiveTab('timestamps')
+                      else setActiveTab('notes')
+                      setPanelOpen(true)
+                    } else {
+                      setPanelOpen(false)
+                    }
+                  }}
+                  className={`absolute right-0 top-1/2 -translate-y-1/2 z-30 bg-[#111820]/90 hover:bg-[#6366F1] text-[#818CF8] hover:text-white border border-r-0 border-white/20 hover:border-[#6366F1] py-3.5 px-2 rounded-l-xl shadow-2xl backdrop-blur-md transition-all duration-300 cursor-pointer flex flex-col items-center gap-1.5 group select-none ${
+                    (!isPlaying || showControls || panelOpen)
+                      ? 'opacity-100 translate-x-0 pointer-events-auto'
+                      : 'opacity-0 translate-x-3 pointer-events-none'
+                  }`}
+                  title={panelOpen ? 'Close side panel (or click video)' : 'Open Timestamps & Notes (<)'}
+                  aria-label={panelOpen ? 'Close panel' : 'Open panel'}
+                >
+                  <ChevronLeft
+                    size={18}
+                    className={`transition-transform duration-300 ${
+                      panelOpen ? 'rotate-180 text-white' : 'text-[#818CF8] group-hover:text-white group-hover:-translate-x-0.5'
+                    }`}
+                  />
+                  <div className="flex flex-col items-center gap-1 mt-0.5">
+                    {activeTab === 'timestamps' && <Clock size={12} className="text-[#818CF8] group-hover:text-white" />}
+                    {activeTab === 'notes' && <FileText size={12} className="text-[#818CF8] group-hover:text-white" />}
+                    {activeTab === 'bookmarks' && <Bookmark size={12} className="text-[#818CF8] group-hover:text-white" />}
+                  </div>
+                </button>
+
                 {/* ── Fullscreen: controls overlay (auto-hide) ── */}
                 {isFullscreen && (
                   <div
-                    className={`absolute inset-x-0 bottom-0 transition-opacity duration-200 z-20 ${
+                    className={`absolute inset-x-0 bottom-0 transition-opacity duration-200 z-30 ${
                       showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
                     }`}
                     onClick={(e) => e.stopPropagation()}
@@ -1116,10 +1675,13 @@ export default function WatchPage() {
                     {/* Gradient bg */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-none" />
                     <div className="relative pt-10 space-y-0">
-                      {/* Time display in fullscreen */}
-                      <div className="px-4 mb-0">
-                        <span className="text-xs text-white/50 font-mono tabular-nums">
+                      {/* Time & Remaining Time display in fullscreen above progress bar */}
+                      <div className="px-4 mb-0.5 flex items-center justify-between select-none">
+                        <span className="text-xs text-white/70 font-mono tabular-nums font-medium">
                           {formatDuration(Math.floor(currentTime))} / {formatDuration(Math.floor(duration))}
+                        </span>
+                        <span className="text-xs text-white/70 font-mono tabular-nums font-medium">
+                          -{formatDuration(Math.max(0, Math.floor(duration - currentTime)))}
                         </span>
                       </div>
                       {progressBar}
@@ -1128,16 +1690,16 @@ export default function WatchPage() {
                   </div>
                 )}
 
-                {/* ── Fullscreen: side panel (absolute right) ── */}
-                {panelOpen && isFullscreen && (
-                  <aside
-                    className="absolute top-0 right-0 bottom-0 w-72 sm:w-80 bg-[#0B0F14]/96 backdrop-blur-sm border-l border-[#1E2A36] flex flex-col overflow-hidden z-30"
-                    onClick={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                  >
-                    {panelContent}
-                  </aside>
-                )}
+                {/* ── Side panel (overlay inside video container for BOTH normal & fullscreen mode) ── */}
+                <aside
+                  className={`absolute top-0 right-0 bottom-0 w-72 sm:w-80 bg-[#0B0F14]/96 backdrop-blur-md border-l border-[#1E2A36] flex flex-col overflow-hidden z-35 transition-transform duration-300 ease-in-out shadow-2xl ${
+                    panelOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
+                  }`}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  {panelContent}
+                </aside>
 
                 {/* ── Break reminder (inside video div = visible in fullscreen) ── */}
                 <BreakReminderModal
@@ -1170,25 +1732,56 @@ export default function WatchPage() {
                   <span>{lecture.durationFormatted}</span>
                 </div>
               )}
+
+              {/* ── Embedded Lecture Slide Panel (below video, normal mode) ── */}
+              {!isFullscreen && lecture.slideUrl && (
+                <div className="border-t border-[#1E2A36] bg-[#0B0F14] w-full">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#1E2A36]">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-[#F8FAFC]">
+                      <FileText size={14} className="text-[#818CF8]" />
+                      <span>Lecture Slide</span>
+                    </div>
+                    <button
+                      onClick={() => setSlideModalOpen(true)}
+                      className="flex items-center gap-1 text-[10px] text-[#818CF8] hover:text-white px-2 py-1 rounded-lg bg-[#6366F1]/10 hover:bg-[#6366F1]/20 transition-colors font-semibold cursor-pointer"
+                    >
+                      <Maximize size={11} />
+                      Expand
+                    </button>
+                  </div>
+                  {/* iframe scale-to-fill: iframe is rendered at 1.35x then scaled down
+                      so Drive's internal centering & chrome is cropped out.
+                      Outer div clips the overflow. Responsive height via padding-top trick. */}
+                  <div
+                    className="w-full overflow-hidden relative"
+                    style={{ paddingTop: '56.25%' /* 16:9 */ }}
+                  >
+                    <iframe
+                      src={toSlideEmbedUrl(lecture.slideUrl)}
+                      allow="autoplay"
+                      loading="lazy"
+                      title="Lecture Slide"
+                      style={{
+                        position: 'absolute',
+                        top: '-13%',
+                        left: '-13%',
+                        width: '126%',
+                        height: '126%',
+                        border: 'none',
+                        display: 'block',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
-
-        {/* ── Side panel (normal mode — fixed bottom on mobile, right sidebar on md+) ── */}
-        {panelOpen && !isFullscreen && (
-          <aside className="
-            fixed bottom-0 left-0 right-0 h-[65vh] z-50
-            md:static md:h-auto md:w-80 xl:w-96 md:z-auto md:shrink-0
-            bg-[#0B0F14] border-t md:border-t-0 md:border-l border-[#1E2A36]
-            flex flex-col overflow-hidden
-          ">
-            {panelContent}
-          </aside>
-        )}
       </div>
 
       {/* ── Resume dialog ── */}
-      <Modal isOpen={showResumeDialog} onClose={() => setShowResumeDialog(false)} title="Resume where you left off?" size="sm">
+      <Modal isOpen={showResumeDialog} onClose={handleResume} title="Resume where you left off?" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-[#94A3B8]">
             You were at{' '}
@@ -1201,6 +1794,52 @@ export default function WatchPage() {
           </div>
         </div>
       </Modal>
+
+      {/* ── Lecture Slide Modal (full-screen in-app viewer) ── */}
+      {slideModalOpen && lecture?.slideUrl && (
+        <div
+          className="fixed inset-0 z-[200] flex flex-col bg-black/90 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Lecture Slide Viewer"
+        >
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-[#0B0F14] border-b border-[#1E2A36] shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText size={16} className="text-[#818CF8] shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#F8FAFC] truncate">Lecture Slide</p>
+                <p className="text-[10px] text-[#64748B] truncate">{lecture.title}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSlideModalOpen(false)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-[#64748B] hover:text-[#F8FAFC] hover:bg-[#111820] transition-colors cursor-pointer shrink-0"
+              aria-label="Close slide viewer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* iframe fills remaining space — scaled to crop Drive chrome */}
+          <div className="flex-1 w-full relative overflow-hidden" style={{ minHeight: 0 }}>
+            <iframe
+              src={toSlideEmbedUrl(lecture.slideUrl)}
+              allow="autoplay"
+              title="Lecture Slide"
+              style={{
+                position: 'absolute',
+                top: '-13%',
+                left: '-13%',
+                width: '126%',
+                height: '126%',
+                border: 'none',
+                display: 'block',
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
