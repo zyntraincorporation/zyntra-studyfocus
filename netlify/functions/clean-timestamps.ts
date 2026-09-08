@@ -129,7 +129,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://zyntrafocus.netlify.app',
+        'HTTP-Referer': 'https://zyntra-focus.netlify.app',
         'X-Title': 'ZyntraFocus',
       },
       body: JSON.stringify({

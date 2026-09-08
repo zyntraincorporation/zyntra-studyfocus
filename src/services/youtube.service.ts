@@ -59,10 +59,10 @@ export async function fetchYouTubeMetadata(url: string): Promise<YouTubeImportRe
       }
     }
 
-    if (status.privacyStatus !== 'public') {
+    if (status.privacyStatus === 'private') {
       return {
         success: false,
-        error: 'This video is private or unlisted and cannot be used.',
+        error: 'This video is private and cannot be embedded. Please set it to Unlisted or Public on YouTube.',
       }
     }
 

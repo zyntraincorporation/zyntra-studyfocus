@@ -13,9 +13,12 @@ import {
   updateLecture,
   deleteLecture,
   toggleImportant,
+  updateChapterResources,
 } from '@/services/curriculum.service'
 import { fetchYouTubeMetadata } from '@/services/youtube.service'
-import type { Subject, Chapter, Lecture, LectureTimestamp, LectureAttachment, AttachmentType } from '@/types/curriculum.types'
+import type { Subject, Chapter, Lecture, LectureTimestamp, LectureAttachment, AttachmentType, ChapterResource } from '@/types/curriculum.types'
+import ResourcesSection from '@/pages/chapters/ResourcesSection'
+
 import { useAuth } from '@/contexts/AuthContext'
 import { buildRoute, ROUTES } from '@/constants/routes'
 import { getThumbnailUrl } from '@/utils/youtube.utils'
@@ -373,6 +376,13 @@ export default function ChapterDetailPage() {
     reload()
   }
 
+  const handleResourcesChange = async (updated: ChapterResource[]) => {
+    if (!user || !chapter) return
+    // Optimistic update
+    setChapter((prev) => prev ? { ...prev, resources: updated } : prev)
+    await updateChapterResources(user.uid, chapter.id, updated)
+  }
+
   if (isLoading) return <SkeletonList count={5} />
   if (!chapter || !subject) return <div className="text-[#64748B]">Chapter not found.</div>
 
@@ -398,6 +408,14 @@ export default function ChapterDetailPage() {
         <Button leftIcon={<Plus size={16} />} onClick={openAdd}>Add Lecture</Button>
       </div>
 
+      {/* Resources section */}
+      <ResourcesSection
+        chapterId={chapter.id}
+        resources={chapter.resources ?? []}
+        isAdmin={!!user}
+        onResourcesChange={handleResourcesChange}
+      />
+
       {/* Lecture list */}
       {lectures.length === 0 ? (
         <EmptyState
@@ -406,6 +424,7 @@ export default function ChapterDetailPage() {
           description="Add a YouTube lecture to get started."
           action={<Button leftIcon={<Plus size={16} />} onClick={openAdd}>Add Lecture</Button>}
         />
+
       ) : (
         <div className="space-y-2">
           {lectures.map((l, idx) => {

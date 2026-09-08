@@ -6,12 +6,14 @@ interface ModalProps {
   onClose: () => void
   title?: string
   children: React.ReactNode
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  maxWidth?: string   // custom tailwind class e.g. 'max-w-3xl'
 }
 
-const sizeMap = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg' }
+const sizeMap = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl' }
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', maxWidth }: ModalProps) {
+
   // Close on Escape
   useEffect(() => {
     if (!isOpen) return
@@ -32,7 +34,8 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
       />
       {/* Modal */}
       <div
-        className={`relative w-full ${sizeMap[size]} bg-[#111820] border border-[#1E2A36] rounded-xl shadow-2xl animate-fade-in`}
+        className={`relative w-full ${maxWidth ?? sizeMap[size]} bg-[#111820] border border-[#1E2A36] rounded-xl shadow-2xl animate-fade-in`}
+
         role="dialog"
         aria-modal="true"
       >

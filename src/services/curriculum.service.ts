@@ -33,7 +33,9 @@ import type {
   SubjectInput,
   ChapterInput,
   LectureInput,
+  ChapterResource,
 } from '@/types/curriculum.types'
+
 
 // ── Path helpers ──────────────────────────────────────────────────────
 
@@ -227,7 +229,19 @@ export async function reorderChapters(
   await batch.commit()
 }
 
+export async function updateChapterResources(
+  userId: string,
+  chapterId: string,
+  resources: ChapterResource[]
+): Promise<void> {
+  await updateDoc(chapterDoc(userId, chapterId), {
+    resources,
+    updatedAt: serverTimestamp(),
+  })
+}
+
 // ── Lectures ──────────────────────────────────────────────────────────
+
 
 export async function getLectures(
   userId: string,

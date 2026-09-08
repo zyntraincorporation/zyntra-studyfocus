@@ -25,6 +25,20 @@ export interface LectureAttachment {
   description?: string
 }
 
+// ── Chapter Resources ─────────────────────────────────────────────────
+export type ChapterResourceType = 'pdf' | 'link' | 'note'
+
+export interface ChapterResource {
+  id: string                // crypto.randomUUID()
+  title: string
+  type: ChapterResourceType
+  url?: string              // for pdf / link types
+  rawContent?: string       // original plain text / markdown (note type)
+  htmlContent?: string      // AI-polished HTML output (note type)
+  createdAt: number         // Date.now()
+}
+
+
 // ── Subject ───────────────────────────────────────────────────────────
 export interface Subject {
   id: string
@@ -50,9 +64,11 @@ export interface Chapter {
   order: number
   isActive: boolean
   lectureCount: number
+  resources?: ChapterResource[]
   createdAt: Timestamp
   updatedAt: Timestamp
 }
+
 
 // ── Lecture ───────────────────────────────────────────────────────────
 export interface Lecture {
