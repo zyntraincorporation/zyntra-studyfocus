@@ -1,8 +1,34 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import {
+  Trash2, RotateCcw, BookOpen, FileText, Link2, Check, AlertCircle,
+} from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { updateUserDocument } from '@/services/users.service'
+import {
+  getTrashedItems,
+  restoreTrashedItem,
+  permanentlyDeleteTrashedItem,
+  emptyAllTrash,
+} from '@/services/trash.service'
+import type { TrashedItem } from '@/types/trash.types'
 import Button from '@/components/ui/Button'
 import { DEFAULT_SEEK_INTERVAL } from '@/constants/firebase'
+
+const TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+  note: { icon: <BookOpen size={13} />, color: '#34D399', label: 'Note' },
+  pdf:  { icon: <FileText size={13} />, color: '#EF4444', label: 'PDF' },
+  link: { icon: <Link2 size={13} />,    color: '#38BDF8', label: 'Link' },
+}
+
+function formatDeletedDate(timestamp: number): string {
+  const date = new Date(timestamp)
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 export default function SettingsPage() {
   const { userDoc, refreshUserDoc } = useAuth()
@@ -16,6 +42,82 @@ export default function SettingsPage() {
   const [showClock, setShowClock] = useState(userDoc?.showClock ?? true)
   const [isSaving, setIsSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // Trash state
+  const [trashedItems, setTrashedItems] = useState<TrashedItem[]>([])
+  const [isTrashLoading, setIsTrashLoading] = useState(true)
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null)
+  const [trashNotice, setTrashNotice] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  useEffect(() => {
+    if (!userDoc) return
+    loadTrash()
+  }, [userDoc?.uid])
+
+  const loadTrash = async () => {
+    if (!userDoc) return
+    setIsTrashLoading(true)
+    try {
+      const items = await getTrashedItems(userDoc.uid)
+      setTrashedItems(items)
+    } catch (err) {
+      console.error('Failed to load trash:', err)
+    } finally {
+      setIsTrashLoading(false)
+    }
+  }
+
+  const showNotice = (text: string, type: 'success' | 'error' = 'success') => {
+    setTrashNotice({ text, type })
+    setTimeout(() => setTrashNotice(null), 3500)
+  }
+
+  const handleRestore = async (item: TrashedItem) => {
+    if (!userDoc) return
+    setActionInProgress(item.id)
+    const result = await restoreTrashedItem(userDoc.uid, item)
+    if (result.success) {
+      setTrashedItems((prev) => prev.filter((t) => t.id !== item.id))
+      showNotice(`"${item.title}" অধ্যায়ে পুনরুদ্ধার করা হয়েছে!`, 'success')
+    } else {
+      showNotice(result.error || 'পুনরুদ্ধার ব্যর্থ হয়েছে।', 'error')
+    }
+    setActionInProgress(null)
+  }
+
+  const handleDeleteForever = async (item: TrashedItem) => {
+    if (!userDoc) return
+    if (!window.confirm(`"${item.title}" স্থায়ীভাবে মুছে ফেলবেন? এটি আর কখনো ফিরিয়ে আনা যাবে না।`)) {
+      return
+    }
+    setActionInProgress(item.id)
+    try {
+      await permanentlyDeleteTrashedItem(userDoc.uid, item.id)
+      setTrashedItems((prev) => prev.filter((t) => t.id !== item.id))
+      showNotice(`"${item.title}" স্থায়ীভাবে মুছে ফেলা হয়েছে।`, 'success')
+    } catch {
+      showNotice('মুছে ফেলা ব্যর্থ হয়েছে।', 'error')
+    } finally {
+      setActionInProgress(null)
+    }
+  }
+
+  const handleEmptyAllTrash = async () => {
+    if (!userDoc || trashedItems.length === 0) return
+    if (!window.confirm('ট্র্যাশের সব আইটেম স্থায়ীভাবে মুছে ফেলবেন? এই কাজটি আর পূর্বাবস্থায় ফিরিয়ে আনা যাবে না।')) {
+      return
+    }
+    setActionInProgress('empty-all')
+    try {
+      await emptyAllTrash(userDoc.uid)
+      setTrashedItems([])
+      showNotice('ট্র্যাশ সম্পূর্ণ খালি করা হয়েছে।', 'success')
+    } catch {
+      showNotice('ট্র্যাশ খালি করা ব্যর্থ হয়েছে।', 'error')
+    } finally {
+      setActionInProgress(null)
+    }
+  }
 
   if (!userDoc) return null
 
@@ -36,8 +138,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-lg space-y-6 animate-fade-in">
-      <h1 className="text-xl font-bold text-[#F8FAFC]">Settings</h1>
+  <div className="max-w-xl space-y-6 animate-fade-in">
+    <h1 className="text-xl font-bold text-[#F8FAFC]">Settings</h1>
 
       {/* Account info */}
       <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-4">
@@ -183,6 +285,114 @@ export default function SettingsPage() {
             />
           </button>
         </div>
+      </section>
+
+      {/* Trash Section */}
+      <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trash2 size={16} className="text-[#EF4444]" />
+            <h2 className="text-sm font-semibold text-[#F8FAFC]">Trash (রিসাইকেল বিন)</h2>
+            {trashedItems.length > 0 && (
+              <span className="text-xs bg-[#EF4444]/15 text-[#EF4444] px-2 py-0.5 rounded-full font-semibold">
+                {trashedItems.length}
+              </span>
+            )}
+          </div>
+          {trashedItems.length > 0 && (
+            <button
+              onClick={handleEmptyAllTrash}
+              disabled={actionInProgress === 'empty-all'}
+              className="text-xs text-[#EF4444] hover:text-[#F87171] hover:bg-[#EF4444]/10 px-2.5 py-1 rounded-lg transition-colors cursor-pointer disabled:opacity-50 font-medium"
+            >
+              {actionInProgress === 'empty-all' ? 'Emptying...' : 'Empty All Trash'}
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-[#64748B]">
+          অধ্যায় থেকে মুছে ফেলা নোট ও রিসোর্সগুলো এখানে জমা থাকে। আপনি চাইলে সেগুলো পূর্বের অধ্যায়ে পুনরুদ্ধার (Restore) করতে পারেন অথবা স্থায়ীভাবে মুছে ফেলতে পারেন।
+        </p>
+
+        {trashNotice && (
+          <div
+            className={`text-xs p-2.5 rounded-lg flex items-center gap-2 ${
+              trashNotice.type === 'success'
+                ? 'text-[#34D399] bg-[#34D399]/10 border border-[#34D399]/20'
+                : 'text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/20'
+            }`}
+          >
+            {trashNotice.type === 'success' ? <Check size={13} className="shrink-0" /> : <AlertCircle size={13} className="shrink-0" />}
+            <span>{trashNotice.text}</span>
+          </div>
+        )}
+
+        {isTrashLoading ? (
+          <div className="text-center py-6 text-xs text-[#64748B]">
+            লোডিং হচ্ছে...
+          </div>
+        ) : trashedItems.length === 0 ? (
+          <div className="text-center py-6 border border-dashed border-[#1E2A36] rounded-xl">
+            <Trash2 size={24} className="mx-auto text-[#1E2A36] mb-1.5" />
+            <p className="text-xs text-[#64748B]">Trash is empty</p>
+            <p className="text-[11px] text-[#475569] mt-0.5">মুছে ফেলা নোটগুলো এখানে দেখতে পাবেন।</p>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+            {trashedItems.map((item) => {
+              const cfg = TYPE_CONFIG[item.resourceType] || TYPE_CONFIG.note
+              const isWorking = actionInProgress === item.id
+
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 p-3 bg-[#17202A] border border-[#1E2A36] hover:border-[#2D3A4A] rounded-xl transition-all"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div
+                      className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs"
+                      style={{ background: `${cfg.color}18`, color: cfg.color }}
+                    >
+                      {cfg.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-[#F8FAFC] truncate">{item.title}</p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-[#64748B] mt-0.5 truncate">
+                        {item.subjectName && (
+                          <span className="text-[#818CF8] truncate">
+                            {item.subjectName} {item.chapterName ? `• ${item.chapterName}` : ''}
+                          </span>
+                        )}
+                        <span>•</span>
+                        <span>{formatDeletedDate(item.deletedAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => handleRestore(item)}
+                      disabled={isWorking}
+                      className="flex items-center gap-1 text-xs text-[#818CF8] hover:text-[#A5B4FC] bg-[#6366F1]/10 hover:bg-[#6366F1]/20 px-2.5 py-1 rounded-lg transition-colors cursor-pointer disabled:opacity-50 font-medium"
+                      title="Restore back to chapter"
+                    >
+                      <RotateCcw size={12} className={isWorking ? 'animate-spin' : ''} />
+                      <span className="hidden sm:inline">Restore</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteForever(item)}
+                      disabled={isWorking}
+                      className="p-1.5 text-[#64748B] hover:text-[#EF4444] hover:bg-[#EF4444]/10 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                      title="Delete Permanently"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </section>
 
       <Button onClick={handleSave} isLoading={isSaving} className="w-full">

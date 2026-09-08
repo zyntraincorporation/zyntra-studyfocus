@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DOMPurify from 'dompurify'
 import {
   Plus, Trash2, ExternalLink, FileText, Link2, BookOpen,
-  Sparkles, Loader2, ChevronDown, ChevronUp, Pencil, AlertCircle, X
+  Sparkles, Loader2, ChevronDown, ChevronUp, Pencil, AlertCircle, X,
+  Maximize, Minimize,
+  ZoomIn, ZoomOut, Maximize2, Minimize2, Search, AlertTriangle,
 } from 'lucide-react'
 import type { ChapterResource, ChapterResourceType } from '@/types/curriculum.types'
 import { callPolishNote } from '@/services/note-polish.service'
+import { moveToTrash } from '@/services/trash.service'
+import { useAuth } from '@/contexts/AuthContext'
+import { renderMathInHtml } from '@/utils/mathRenderer'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 
@@ -16,7 +21,7 @@ function isValidUrl(url: string): boolean {
 }
 
 function sanitizeHtml(html: string): string {
-  return DOMPurify.sanitize(html, {
+  const clean = DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
       'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'u', 's',
@@ -27,6 +32,7 @@ function sanitizeHtml(html: string): string {
     FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'href', 'src'],
   })
+  return renderMathInHtml(clean)
 }
 
 const TYPE_CONFIG: Record<ChapterResourceType, { icon: React.ReactNode; label: string; color: string }> = {
@@ -35,7 +41,239 @@ const TYPE_CONFIG: Record<ChapterResourceType, { icon: React.ReactNode; label: s
   note: { icon: <BookOpen size={14} />,  label: 'Note', color: '#34D399' },
 }
 
-// ── Note Viewer Modal ─────────────────────────────────────────────────
+// Convert any URL to an embeddable URL that displays inline (no download)
+function toEmbedUrl(url: string, type?: ChapterResourceType): string {
+  if (!url) return ''
+  const trimmed = url.trim()
+
+  // 1. If already an embed or preview URL
+  if (trimmed.includes('/preview')) return trimmed
+  if (trimmed.includes('docs.google.com/viewer')) return trimmed
+
+  // 2. Google Drive /file/d/{ID}
+  const driveFile = trimmed.match(/drive\.google\.com\/file\/d\/([^/?#]+)/)
+  if (driveFile) return `https://drive.google.com/file/d/${driveFile[1]}/preview`
+
+  // 3. Google Drive with id param: ?id={ID}, &id={ID}, /open?id={ID}, /uc?id={ID}
+  const driveId = trimmed.match(/drive\.google\.com\/[^\s]*[?&]id=([^&#]+)/)
+  if (driveId) return `https://drive.google.com/file/d/${driveId[1]}/preview`
+
+  // 4. Google Docs / Sheets / Slides
+  const docsMatch = trimmed.match(/docs\.google\.com\/(document|spreadsheets|presentation)\/d\/([^/?#]+)/)
+  if (docsMatch) return `https://docs.google.com/${docsMatch[1]}/d/${docsMatch[2]}/preview`
+
+  // 5. Any other Google Drive link with a 25+ char ID
+  if (trimmed.includes('drive.google.com')) {
+    const rawIdMatch = trimmed.match(/[-\w]{25,}/)
+    if (rawIdMatch) return `https://drive.google.com/file/d/${rawIdMatch[0]}/preview`
+  }
+
+  // 6. PDF files: Use Google Docs Viewer to render inside iframe without browser download
+  const isPdf = type === 'pdf' || /\.pdf($|[?#])/i.test(trimmed)
+  if (isPdf) {
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(trimmed)}&embedded=true`
+  }
+
+  // 7. Fallback for generic links
+  return trimmed
+}
+
+
+// ── Fullscreen Overlay Viewer (covers entire viewport, within website) ─
+
+function FullscreenViewer({
+  title,
+  type,
+  onClose,
+  children,
+  externalUrl,
+  extraAction,
+}: {
+  title: string
+  type: ChapterResourceType
+  onClose: () => void
+  children: React.ReactNode
+  externalUrl?: string
+  extraAction?: React.ReactNode
+}) {
+  // Browser fullscreen state
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false)
+
+  // Close on Escape & sync fullscreen state
+  useEffect(() => {
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const fsHandler = () => setIsBrowserFullscreen(!!document.fullscreenElement)
+    document.addEventListener('keydown', keyHandler)
+    document.addEventListener('fullscreenchange', fsHandler)
+    return () => {
+      document.removeEventListener('keydown', keyHandler)
+      document.removeEventListener('fullscreenchange', fsHandler)
+    }
+  }, [onClose])
+
+  const toggleBrowserFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen()
+      } else {
+        await document.exitFullscreen()
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const cfg = TYPE_CONFIG[type]
+
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex flex-col bg-black/95 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+      style={{ animation: 'fadeIn .15s ease' }}
+    >
+      {/* Top bar (100% mobile-responsive) */}
+      <div className="flex items-center justify-between px-2.5 sm:px-5 py-2 sm:py-3 bg-[#0B0F14] border-b border-[#1E2A36] shrink-0 gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+          <span style={{ color: cfg.color }} className="shrink-0">{cfg.icon}</span>
+          <span className="text-xs sm:text-sm font-semibold text-[#F8FAFC] truncate max-w-[28vw] sm:max-w-[42vw]">{title}</span>
+          <span
+            className="text-[9px] sm:text-[10px] font-medium px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 hidden xs:inline-block"
+            style={{ background: `${cfg.color}18`, color: cfg.color }}
+          >
+            {cfg.label}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {extraAction}
+          <button
+            onClick={toggleBrowserFullscreen}
+            className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1E2A36] px-1.5 sm:px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            title={isBrowserFullscreen ? 'Exit Full Screen' : 'Full Screen'}
+          >
+            {isBrowserFullscreen ? <Minimize size={13} /> : <Maximize size={13} />}
+            <span className="hidden lg:inline">{isBrowserFullscreen ? 'Exit Screen' : 'Full Screen'}</span>
+          </button>
+          {externalUrl && (
+            <a
+              href={externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-[#64748B] hover:text-[#818CF8] hover:bg-[#1E2A36] px-1.5 sm:px-2.5 py-1 rounded-lg transition-colors"
+              title="Open in new tab"
+            >
+              <ExternalLink size={13} />
+              <span className="hidden lg:inline">Open</span>
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1 text-xs text-[#64748B] hover:text-[#F8FAFC] transition-colors cursor-pointer px-1.5 sm:px-2 py-1 rounded-lg hover:bg-[#1E2A36]"
+            title="Close (Esc)"
+          >
+            <X size={15} />
+            <span className="hidden sm:inline">Close</span>
+            <span className="text-[#475569] hidden md:inline ml-0.5">Esc</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 w-full relative overflow-hidden" style={{ minHeight: 0 }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ── PDF / Link Fullscreen Viewer ──────────────────────────────────────
+
+function EmbedViewerModal({
+  resource,
+  onClose,
+}: {
+  resource: ChapterResource
+  onClose: () => void
+}) {
+  const [iframeError, setIframeError] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [useAltViewer, setUseAltViewer] = useState(false)
+
+  const rawUrl = resource.url ?? ''
+  const isDrive = rawUrl.includes('drive.google.com') || rawUrl.includes('docs.google.com')
+
+  // Calculate embed URL passing resource.type
+  let embedUrl = toEmbedUrl(rawUrl, resource.type)
+  if (useAltViewer) {
+    if (embedUrl.includes('docs.google.com/viewer')) {
+      embedUrl = rawUrl
+    } else {
+      embedUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(rawUrl)}&embedded=true`
+    }
+  }
+
+  return (
+    <FullscreenViewer
+      title={resource.title}
+      type={resource.type}
+      onClose={onClose}
+      externalUrl={resource.url}
+      extraAction={
+        !isDrive && resource.type === 'pdf' ? (
+          <button
+            onClick={() => {
+              setUseAltViewer((v) => !v)
+              setIsLoading(true)
+              setIframeError(false)
+            }}
+            className="text-xs text-[#818CF8] hover:text-[#A5B4FC] px-2.5 py-1 rounded-lg bg-[#6366F1]/10 hover:bg-[#6366F1]/20 transition-colors cursor-pointer"
+            title="Switch PDF viewer engine"
+          >
+            {useAltViewer ? 'Original View' : 'Google Viewer'}
+          </button>
+        ) : null
+      }
+    >
+      <div className="w-full h-full relative overflow-hidden bg-[#0B0F14]">
+        {isLoading && !iframeError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#080C12] z-10">
+            <Loader2 size={30} className="animate-spin text-[#818CF8]" />
+            <p className="text-xs text-[#64748B]">Loading document...</p>
+          </div>
+        )}
+        {!iframeError ? (
+          <iframe
+            key={embedUrl}
+            src={embedUrl}
+            className="w-full h-full border-none bg-[#0B0F14] block"
+            title={resource.title}
+            allow="autoplay"
+            onLoad={() => setIsLoading(false)}
+            onError={() => {
+              setIsLoading(false)
+              setIframeError(true)
+            }}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-4 h-full text-center px-4">
+            <FileText size={48} className="text-[#1E2A36]" />
+            <p className="text-sm text-[#64748B]">This content cannot be previewed directly.</p>
+            <a
+              href={resource.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-5 py-2.5 bg-[#6366F1]/15 hover:bg-[#6366F1]/25 text-[#818CF8] rounded-xl text-sm transition-colors font-medium"
+            >
+              <ExternalLink size={15} /> Open in new tab
+            </a>
+          </div>
+        )}
+      </div>
+    </FullscreenViewer>
+  )
+}
+
+// ── Note Fullscreen Viewer ────────────────────────────────────────────
 
 function NoteViewerModal({
   resource,
@@ -44,22 +282,86 @@ function NoteViewerModal({
   resource: ChapterResource
   onClose: () => void
 }) {
+  const [zoom, setZoom] = useState<number>(100)
+  const [isFullWidth, setIsFullWidth] = useState<boolean>(false)
+
   const html = resource.htmlContent
     ? sanitizeHtml(resource.htmlContent)
-    : `<pre style="color:#CBD5E1;white-space:pre-wrap;font-size:13px;line-height:1.7">${resource.rawContent ?? ''}</pre>`
+    : `<pre style="color:#CBD5E1;white-space:pre-wrap;font-size:14px;line-height:1.8;font-family:monospace">${resource.rawContent ?? ''}</pre>`
+
+  const handleZoomIn = () => {
+    setZoom((z) => Math.min(200, z >= 130 ? z + 20 : z + 15))
+  }
+
+  const handleZoomOut = () => {
+    setZoom((z) => Math.max(75, z > 130 ? z - 20 : z - 15))
+  }
 
   return (
-    <Modal
-      isOpen
-      onClose={onClose}
+    <FullscreenViewer
       title={resource.title}
-      maxWidth="max-w-3xl"
+      type={resource.type}
+      onClose={onClose}
+      extraAction={
+        <div className="flex items-center gap-1 sm:gap-2">
+          {/* Zoom controls with Magnifying Glass */}
+          <div className="flex items-center bg-[#17202A] border border-[#1E2A36] rounded-lg p-0.5">
+            <button
+              onClick={handleZoomOut}
+              disabled={zoom <= 75}
+              className="p-1 text-[#94A3B8] hover:text-[#F8FAFC] disabled:opacity-30 transition-colors cursor-pointer"
+              title="Zoom Out"
+            >
+              <ZoomOut size={13} />
+            </button>
+            <button
+              onClick={() => setZoom(100)}
+              className="flex items-center gap-0.5 px-1 sm:px-1.5 text-[11px] font-mono text-[#818CF8] hover:text-[#A5B4FC] transition-colors cursor-pointer"
+              title="Reset Zoom to 100%"
+            >
+              <Search size={10} className="text-[#818CF8]/70 hidden sm:inline" />
+              <span>{zoom}%</span>
+            </button>
+            <button
+              onClick={handleZoomIn}
+              disabled={zoom >= 200}
+              className="p-1 text-[#94A3B8] hover:text-[#F8FAFC] disabled:opacity-30 transition-colors cursor-pointer"
+              title="Zoom In"
+            >
+              <ZoomIn size={13} />
+            </button>
+          </div>
+
+          {/* Full Page Width / Fit Column toggle */}
+          <button
+            onClick={() => setIsFullWidth((w) => !w)}
+            className="flex items-center gap-1 text-xs text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#1E2A36] px-2 py-1 rounded-lg transition-colors cursor-pointer"
+            title={isFullWidth ? 'Switch to Standard Reading Width' : 'Expand to Full Page Width'}
+          >
+            {isFullWidth ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            <span className="hidden md:inline">{isFullWidth ? 'Fit Column' : 'Full Page'}</span>
+          </button>
+        </div>
+      }
     >
-      <div
-        className="overflow-y-auto max-h-[70vh] pr-1"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    </Modal>
+      <div className="h-full flex flex-col relative bg-[#080C12]">
+        {/* Note Content - 100000% Mobile responsive with pure native scroll (0 lag) */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden w-full overscroll-contain">
+          <div
+            className={`mx-auto w-full transition-all duration-150 ${
+              isFullWidth
+                ? 'max-w-none px-3 sm:px-8 md:px-12'
+                : 'max-w-4xl px-3 sm:px-6 md:px-10'
+            } py-4 sm:py-8 selection:bg-[#6366F1]/30`}
+            style={{
+              zoom: `${zoom}%`,
+              fontSize: `${Math.round(15 * (zoom / 100))}px`,
+            }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </div>
+      </div>
+    </FullscreenViewer>
   )
 }
 
@@ -69,10 +371,14 @@ function ResourceFormModal({
   initial,
   onSave,
   onClose,
+  subjectName,
+  chapterName,
 }: {
   initial?: ChapterResource
   onSave: (r: ChapterResource) => void
   onClose: () => void
+  subjectName?: string
+  chapterName?: string
 }) {
   const [title, setTitle]           = useState(initial?.title ?? '')
   const [type, setType]             = useState<ChapterResourceType>(initial?.type ?? 'note')
@@ -87,7 +393,7 @@ function ResourceFormModal({
     if (!rawContent.trim()) return
     setIsPolishing(true)
     setPolishError(null)
-    const result = await callPolishNote(rawContent)
+    const result = await callPolishNote(rawContent, subjectName, chapterName)
     if ('error' in result) {
       setPolishError(result.error)
     } else {
@@ -127,6 +433,14 @@ function ResourceFormModal({
       maxWidth="max-w-2xl"
     >
       <div className="space-y-4">
+        {/* Academic context badge */}
+        {subjectName && (
+          <div className="flex items-center gap-1.5 text-xs text-[#818CF8] bg-[#6366F1]/10 border border-[#6366F1]/20 px-3 py-1.5 rounded-xl w-fit">
+            <BookOpen size={13} className="text-[#818CF8]" />
+            <span className="font-semibold">{subjectName}</span>
+            {chapterName && <span className="text-[#94A3B8]">/ {chapterName}</span>}
+          </div>
+        )}
 
         {/* Title */}
         <div className="space-y-1.5">
@@ -142,45 +456,54 @@ function ResourceFormModal({
 
         {/* Type selector */}
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-[#94A3B8]">Type</label>
-          <div className="flex gap-2">
-            {(['note', 'pdf', 'link'] as ChapterResourceType[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setType(t)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                  type === t
-                    ? 'bg-[#6366F1]/20 text-[#818CF8] border border-[#6366F1]/40'
-                    : 'bg-[#17202A] text-[#64748B] border border-[#1E2A36] hover:text-[#94A3B8]'
-                }`}
-              >
-                {TYPE_CONFIG[t].icon}
-                {TYPE_CONFIG[t].label}
-              </button>
-            ))}
+          <label className="text-xs font-medium text-[#94A3B8]">Resource Type</label>
+          <div className="grid grid-cols-3 gap-2">
+            {(['note', 'pdf', 'link'] as ChapterResourceType[]).map((t) => {
+              const cfg = TYPE_CONFIG[t]
+              const active = type === t
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setType(t)}
+                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    active
+                      ? 'border-[#6366F1] bg-[#6366F1]/15 text-[#F8FAFC]'
+                      : 'border-[#1E2A36] bg-[#111820] text-[#64748B] hover:text-[#94A3B8] hover:border-[#2D3A4A]'
+                  }`}
+                >
+                  <span style={{ color: cfg.color }}>{cfg.icon}</span>
+                  {cfg.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* URL field for pdf/link */}
+        {/* URL input for PDF / Link */}
         {type !== 'note' && (
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-[#94A3B8]">URL</label>
-            <div className="flex gap-2">
+            <label className="text-xs font-medium text-[#94A3B8]">
+              {type === 'pdf' ? 'PDF URL (Google Drive preview or direct link)' : 'URL'}
+            </label>
+            <div className="relative">
               <input
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://drive.google.com/..."
-                className={`flex-1 bg-[#111820] border rounded-xl px-3 py-2.5 text-sm text-[#F8FAFC] placeholder-[#475569] focus:outline-none focus:ring-1 focus:ring-[#6366F1] ${
-                  url && !isValidUrl(url) ? 'border-[#EF4444]/50' : 'border-[#1E2A36]'
-                }`}
+                placeholder={
+                  type === 'pdf'
+                    ? 'https://drive.google.com/file/d/.../view or https://...file.pdf'
+                    : 'https://...'
+                }
+                className="w-full bg-[#111820] border border-[#1E2A36] rounded-xl px-3 py-2.5 pr-8 text-sm text-[#F8FAFC] placeholder-[#475569] focus:outline-none focus:ring-1 focus:ring-[#6366F1]"
               />
               {url && isValidUrl(url) && (
                 <a
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center px-3 rounded-xl bg-[#17202A] border border-[#1E2A36] text-[#64748B] hover:text-[#818CF8] transition-colors"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#818CF8]"
                 >
                   <ExternalLink size={14} />
                 </a>
@@ -206,7 +529,7 @@ function ResourceFormModal({
                 className="w-full bg-[#111820] border border-[#1E2A36] rounded-xl px-3 py-2.5 text-sm text-[#F8FAFC] placeholder-[#475569] resize-none focus:outline-none focus:ring-1 focus:ring-[#6366F1] h-40 font-mono"
               />
               <p className="text-[10px] text-[#475569]">
-                {rawContent.length.toLocaleString()} / 8,000 characters
+                {rawContent.length.toLocaleString()} / 25,000 characters
               </p>
             </div>
 
@@ -224,10 +547,10 @@ function ResourceFormModal({
                   size="sm"
                   onClick={handlePolish}
                   isLoading={isPolishing}
-                  disabled={!rawContent.trim() || rawContent.length > 8000}
+                  disabled={!rawContent.trim() || rawContent.length > 25000}
                   leftIcon={<Sparkles size={13} />}
                 >
-                  {isPolishing ? 'Polishing...' : '✨ Polish with AI'}
+                  {isPolishing ? 'Polishing in Bengali...' : '✨ Polish with AI (বাংলায় সাজান)'}
                 </Button>
               </div>
             )}
@@ -293,6 +616,83 @@ function ResourceFormModal({
   )
 }
 
+// ── Delete Warning Modal (Move to Trash) ──────────────────────────────
+
+function DeleteWarningModal({
+  resource,
+  onConfirm,
+  onClose,
+  isDeleting,
+}: {
+  resource: ChapterResource
+  onConfirm: () => void
+  onClose: () => void
+  isDeleting: boolean
+}) {
+  const [confirmed, setConfirmed] = useState(false)
+  const cfg = TYPE_CONFIG[resource.type]
+
+  return (
+    <Modal isOpen onClose={onClose} title="Move to Trash?" maxWidth="max-w-md">
+      <div className="space-y-4">
+        {/* Warning box */}
+        <div className="flex items-start gap-3 p-3.5 rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#EF4444]">
+          <AlertTriangle size={20} className="shrink-0 mt-0.5" />
+          <div className="text-xs space-y-1">
+            <p className="font-semibold text-[#F8FAFC]">Are you sure you want to delete this {cfg.label}?</p>
+            <p className="text-[#94A3B8] leading-relaxed">
+              This item will be removed from this chapter and safely moved to <strong className="text-[#F8FAFC]">Settings &gt; Trash</strong>. You can restore it anytime or delete it permanently from there.
+            </p>
+          </div>
+        </div>
+
+        {/* Resource preview card */}
+        <div className="p-3 rounded-xl bg-[#111820] border border-[#1E2A36] flex items-center gap-2.5">
+          <div
+            className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-xs"
+            style={{ background: `${cfg.color}18`, color: cfg.color }}
+          >
+            {cfg.icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-[#F8FAFC] truncate">{resource.title}</p>
+            <span className="text-[10px] text-[#64748B]">{cfg.label}</span>
+          </div>
+        </div>
+
+        {/* Confirmation Checkbox */}
+        <label className="flex items-start gap-2.5 p-3 rounded-xl bg-[#17202A] border border-[#1E2A36] cursor-pointer hover:border-[#2D3A4A] transition-colors">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+            className="mt-0.5 w-4 h-4 rounded accent-[#EF4444] cursor-pointer shrink-0"
+          />
+          <span className="text-xs text-[#CBD5E1] leading-relaxed select-none">
+            I understand and confirm that I want to move this note to Trash.
+          </span>
+        </label>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#1E2A36]">
+          <Button variant="ghost" onClick={onClose} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={onConfirm}
+            disabled={!confirmed || isDeleting}
+            isLoading={isDeleting}
+            leftIcon={<Trash2 size={13} />}
+          >
+            Move to Trash
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Main ResourcesSection ─────────────────────────────────────────────
 
 interface ResourcesSectionProps {
@@ -300,17 +700,28 @@ interface ResourcesSectionProps {
   resources: ChapterResource[]
   isAdmin: boolean
   onResourcesChange: (updated: ChapterResource[]) => void
+  subjectId?: string
+  subjectName?: string
+  chapterName?: string
 }
 
 export default function ResourcesSection({
+  chapterId,
   resources,
   isAdmin,
   onResourcesChange,
+  subjectId,
+  subjectName,
+  chapterName,
 }: ResourcesSectionProps) {
-  const [isExpanded, setIsExpanded]     = useState(true)
-  const [showForm, setShowForm]         = useState(false)
+  const { user } = useAuth()
+  const [isExpanded, setIsExpanded]           = useState(true)
+  const [showForm, setShowForm]               = useState(false)
   const [editingResource, setEditingResource] = useState<ChapterResource | null>(null)
-  const [viewingNote, setViewingNote]   = useState<ChapterResource | null>(null)
+  const [deletingResource, setDeletingResource] = useState<ChapterResource | null>(null)
+  const [isDeleting, setIsDeleting]           = useState(false)
+  const [viewingNote, setViewingNote]         = useState<ChapterResource | null>(null)
+  const [viewingEmbed, setViewingEmbed]       = useState<ChapterResource | null>(null)
 
   if (!isAdmin && resources.length === 0) return null
 
@@ -324,15 +735,40 @@ export default function ResourcesSection({
     setEditingResource(null)
   }
 
-  const handleDelete = (id: string) => {
-    onResourcesChange(resources.filter((r) => r.id !== id))
+  const handleConfirmDelete = async () => {
+    if (!deletingResource) return
+    setIsDeleting(true)
+    try {
+      if (user) {
+        await moveToTrash(user.uid, {
+          originalId: deletingResource.id,
+          type: 'resource',
+          title: deletingResource.title,
+          resourceType: deletingResource.type,
+          subjectId,
+          subjectName,
+          chapterId,
+          chapterName,
+          ...(deletingResource.url ? { url: deletingResource.url } : {}),
+          ...(deletingResource.rawContent ? { rawContent: deletingResource.rawContent } : {}),
+          ...(deletingResource.htmlContent ? { htmlContent: deletingResource.htmlContent } : {}),
+          createdAt: deletingResource.createdAt,
+        })
+      }
+      onResourcesChange(resources.filter((r) => r.id !== deletingResource.id))
+      setDeletingResource(null)
+    } catch (err) {
+      console.error('Error moving resource to trash:', err)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const handleCardClick = (r: ChapterResource) => {
     if (r.type === 'note') {
       setViewingNote(r)
     } else if (r.url) {
-      window.open(r.url, '_blank', 'noopener,noreferrer')
+      setViewingEmbed(r)
     }
   }
 
@@ -425,9 +861,9 @@ export default function ResourcesSection({
                             <Pencil size={11} />
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDelete(r.id) }}
+                            onClick={(e) => { e.stopPropagation(); setDeletingResource(r) }}
                             className="p-1 rounded-lg bg-[#1E2A36] text-[#64748B] hover:text-[#EF4444] transition-colors cursor-pointer"
-                            title="Delete"
+                            title="Delete (Move to Trash)"
                           >
                             <Trash2 size={11} />
                           </button>
@@ -448,6 +884,17 @@ export default function ResourcesSection({
           initial={editingResource ?? undefined}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditingResource(null) }}
+          subjectName={subjectName}
+          chapterName={chapterName}
+        />
+      )}
+
+      {deletingResource && (
+        <DeleteWarningModal
+          resource={deletingResource}
+          onConfirm={handleConfirmDelete}
+          onClose={() => setDeletingResource(null)}
+          isDeleting={isDeleting}
         />
       )}
 
@@ -455,6 +902,13 @@ export default function ResourcesSection({
         <NoteViewerModal
           resource={viewingNote}
           onClose={() => setViewingNote(null)}
+        />
+      )}
+
+      {viewingEmbed && (
+        <EmbedViewerModal
+          resource={viewingEmbed}
+          onClose={() => setViewingEmbed(null)}
         />
       )}
     </>

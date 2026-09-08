@@ -9,6 +9,7 @@ export const SUB = {
   STUDY_SESSIONS: 'studySessions',
   SETTINGS: 'settings',
   STUDY_PLANS: 'studyPlans',
+  TRASH: 'trash',
 } as const
 
 // Top-level collection

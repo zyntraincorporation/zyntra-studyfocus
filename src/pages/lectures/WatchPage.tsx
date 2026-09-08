@@ -69,16 +69,30 @@ const BM_CATEGORIES: BookmarkCategory[] = ['important', 'formula', 'exam_questio
 
 // ── Convert any Google Drive share URL → clean embeddable preview URL ─
 function toSlideEmbedUrl(url: string): string {
-  // Already a preview link
-  if (url.includes('/preview')) return url
-  // https://drive.google.com/file/d/FILE_ID/view?...  →  /preview
-  const m = url.match(/\/file\/d\/([^/?#]+)/)
-  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`
-  // https://drive.google.com/open?id=FILE_ID
-  const m2 = url.match(/[?&]id=([^&]+)/)
-  if (m2) return `https://drive.google.com/file/d/${m2[1]}/preview`
-  // Fallback: return as-is (e.g. already PDF direct)
-  return url
+  if (!url) return ''
+  const trimmed = url.trim()
+  if (trimmed.includes('/preview')) return trimmed
+  if (trimmed.includes('docs.google.com/viewer')) return trimmed
+
+  const mFile = trimmed.match(/\/file\/d\/([^/?#]+)/)
+  if (mFile) return `https://drive.google.com/file/d/${mFile[1]}/preview`
+
+  const mId = trimmed.match(/[?&]id=([^&#]+)/)
+  if (mId) return `https://drive.google.com/file/d/${mId[1]}/preview`
+
+  const mDocs = trimmed.match(/docs\.google\.com\/(presentation|document|spreadsheets)\/d\/([^/?#]+)/)
+  if (mDocs) return `https://docs.google.com/${mDocs[1]}/d/${mDocs[2]}/preview`
+
+  if (trimmed.includes('drive.google.com')) {
+    const rawIdMatch = trimmed.match(/[-\w]{25,}/)
+    if (rawIdMatch) return `https://drive.google.com/file/d/${rawIdMatch[0]}/preview`
+  }
+
+  if (/\.pdf($|[?#])/i.test(trimmed)) {
+    return `https://docs.google.com/viewer?url=${encodeURIComponent(trimmed)}&embedded=true`
+  }
+
+  return trimmed
 }
 
 // ── Dropdown popup ────────────────────────────────────────────────────
@@ -1754,7 +1768,7 @@ export default function WatchPage() {
                       so Drive's internal centering & chrome is cropped out.
                       Outer div clips the overflow. Responsive height via padding-top trick. */}
                   <div
-                    className="w-full overflow-hidden relative"
+                    className="w-full overflow-hidden relative bg-[#0B0F14] rounded-xl border border-[#1E2A36]"
                     style={{ paddingTop: '56.25%' /* 16:9 */ }}
                   >
                     <iframe
@@ -1762,15 +1776,7 @@ export default function WatchPage() {
                       allow="autoplay"
                       loading="lazy"
                       title="Lecture Slide"
-                      style={{
-                        position: 'absolute',
-                        top: '-13%',
-                        left: '-13%',
-                        width: '126%',
-                        height: '126%',
-                        border: 'none',
-                        display: 'block',
-                      }}
+                      className="absolute inset-0 w-full h-full border-none bg-[#0B0F14] block"
                     />
                   </div>
                 </div>
@@ -1821,21 +1827,13 @@ export default function WatchPage() {
             </button>
           </div>
 
-          {/* iframe fills remaining space — scaled to crop Drive chrome */}
-          <div className="flex-1 w-full relative overflow-hidden" style={{ minHeight: 0 }}>
+          {/* iframe fills remaining space cleanly, bottom bar intact */}
+          <div className="flex-1 w-full relative overflow-hidden bg-[#0B0F14]" style={{ minHeight: 0 }}>
             <iframe
               src={toSlideEmbedUrl(lecture.slideUrl)}
               allow="autoplay"
               title="Lecture Slide"
-              style={{
-                position: 'absolute',
-                top: '-13%',
-                left: '-13%',
-                width: '126%',
-                height: '126%',
-                border: 'none',
-                display: 'block',
-              }}
+              className="w-full h-full border-none bg-[#0B0F14] block"
             />
           </div>
         </div>

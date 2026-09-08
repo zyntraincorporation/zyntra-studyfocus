@@ -414,6 +414,9 @@ export default function ChapterDetailPage() {
         resources={chapter.resources ?? []}
         isAdmin={!!user}
         onResourcesChange={handleResourcesChange}
+        subjectId={subject.id}
+        subjectName={subject.name}
+        chapterName={chapter.name}
       />
 
       {/* Lecture list */}
