@@ -154,7 +154,11 @@ export const handler: Handler = async (event: HandlerEvent) => {
       }
     }
 
-    const json = await response.json()
+    interface OpenRouterResponse {
+      choices?: { message?: { content?: string } }[]
+    }
+
+    const json = (await response.json()) as OpenRouterResponse
     const content: string = json?.choices?.[0]?.message?.content ?? ''
 
     if (!content.trim()) {

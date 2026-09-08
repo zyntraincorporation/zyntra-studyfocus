@@ -108,7 +108,11 @@ OUTPUT FORMAT:
                 return
               }
 
-              const json = await response.json()
+              interface OpenRouterResponse {
+                choices?: { message?: { content?: string } }[]
+              }
+
+              const json = (await response.json()) as OpenRouterResponse
               const content = json?.choices?.[0]?.message?.content ?? ''
               const html = content.replace(/^```(?:html)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
               res.statusCode = 200
