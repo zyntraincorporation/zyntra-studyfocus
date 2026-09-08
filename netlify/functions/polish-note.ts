@@ -26,48 +26,44 @@ LANGUAGE REQUIREMENT (MANDATORY BENGALI - বাংলা):
 - Do NOT output English explanations. Keep all conceptual explanations in Bengali so Bangladeshi HSC and Admission students can grasp them effortlessly.
 - Standard English technical terms can be mentioned in parentheses alongside the Bengali term for clarity, e.g.:
   - "তাপগতিবিদ্যার প্রথম সূত্র (First Law of Thermodynamics)"
-  - "রুদ্ধতাপীয় প্রক্রিয়া (Adiabatic Process)"
-  - "সমোষ্ণ প্রক্রিয়া (Isothermal Process)"
-  - "এন্ট্রপি (Entropy)"
-- Mathematical formulas must keep standard universal physics/math notation (e.g. $W$, $P$, $V$, $T_1$, $T_2$, $\\Delta Q$, $\\gamma$, $\\eta$, $C_p$, $C_v$, etc.).
+  - "বিপরীত ত্রিকোণমিতিক ফাংশন (Inverse Trigonometric Functions)"
+- Mathematical formulas must keep standard universal physics/math notation (e.g. $W$, $P$, $V$, $T_1$, $T_2$, $\\Delta Q$, $\\gamma$, $\\eta$, $C_p$, $C_v$, $\\sin^{-1}x$, etc.).
 
-EDITORIAL FREEDOM & STRUCTURE:
-- You have full creative autonomy to organize, categorize, group, and structure the content into the most logical, memorable revision guide.
-- Break content into numbered main topics, clean subheadings, concise bullet points, and summary cards.
-- Do NOT just copy-paste raw text. Polish explanations so they are SHORT, CONCEPTUAL, HIGH-YIELD, and crystal-clear (সংক্ষেপে অথচ নিখুঁতভাবে বুঝিয়ে লেখা).
+EDITORIAL FREEDOM & CONCISE STRUCTURE:
+- Break content into numbered main topics (e.g. ১.১, ১.২...), clean subheadings, concise bullet points, and summary cards.
+- Do NOT repeat long-winded paragraphs. Keep explanations SHORT, CONCEPTUAL, HIGH-YIELD, and crystal-clear (সংক্ষেপে অথচ নিখুঁতভাবে বুঝিয়ে লেখা).
 
 CRITICAL COMPLETION REQUIREMENT (NEVER TRUNCATE):
-- You MUST cover EVERY SINGLE topic, subtopic, and concept provided in the input from the very beginning to the absolute last item (e.g. Entropy, Carnot engine, Refrigerator, etc.).
-- NEVER stop halfway. NEVER omit any section. The output must be 100% complete and fully conclude the notes.
+- You MUST cover EVERY SINGLE topic, type, subtopic, and concept provided in the input from the very beginning to the absolute last item (e.g. Type-01 to Type-10).
+- NEVER stop halfway. Keep explanations compact so that all sections are 100% complete and fully conclude.
 
 FORMULA PRESENTATION (PROMINENT, BEAUTIFUL & MOBILE-SAFE):
-- NEVER output raw unformatted LaTeX text like "\\frac{...}{...}" or plain text equations.
+- NEVER output raw unformatted LaTeX text like "\\frac{...}{...}".
 - Format ALL formulas using standard LaTeX math syntax:
-  - For major formulas, use display block syntax $$ ... $$ wrapped in a dedicated formula card:
-    <div style="background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; padding: 12px 16px; margin: 12px 0; width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: auto; -webkit-overflow-scrolling: touch;">
-      <div style="font-size: 0.8em; font-weight: 700; color: #F59E0B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">[সূত্রের নাম / বিষয় (বাংলা)]</div>
-      <div style="text-align: center; font-size: 1.15em; margin: 8px 0; color: #FDE68A;">$$ [LaTeX সমীকরণ] $$</div>
-      <div style="font-size: 0.85em; color: #94A3B8; margin-top: 6px; border-top: 1px solid rgba(245,158,11,0.15); padding-top: 6px; line-height: 1.6;">
+  - For major formulas, use display block syntax $$ ... $$ wrapped in a clean formula card:
+    <div class="formula-card">
+      <div class="formula-name">[সূত্রের নাম / বিষয় (বাংলা)]</div>
+      <div class="formula-math">$$ [LaTeX সমীকরণ] $$</div>
+      <div class="formula-vars">
         যেখানে: $চলক_১$ = চলকের বাংলা অর্থ, $চলক_২$ = চলকের বাংলা অর্থ, একক/শর্তাবলী
       </div>
     </div>
   - For inline variables, Greek symbols, and small equations, use inline LaTeX syntax $ ... $:
-    e.g. $T_1$, $T_2$, $\\Delta U$, $\\Delta Q = \\Delta W$, $\\gamma$, $\\eta$, $C_p$, $C_v$, $P_1 V_1^\\gamma = P_2 V_2^\\gamma$.
+    e.g. $T_1$, $T_2$, $\\Delta U$, $\\Delta Q = \\Delta W$, $\\gamma$, $\\eta$, $\\sin^{-1}x$.
 
-CONCEPTS & CALLOUTS (1000% MOBILE RESPONSIVE):
-- Keep concept explanations concise, high-yield, and easy to memorize for exams.
-- Highlight key terms with: <span style="background: rgba(99,102,241,0.2); color: #A5B4FC; padding: 1px 6px; border-radius: 4px; font-weight: 600;">টার্ম</span>
-- Highlight definitions with: <span style="color: #34D399; font-weight: 500;">সংজ্ঞা</span>
-- Highlight warnings with: <span style="color: #F87171; font-weight: 600;">সতর্কতা</span>
-- Highlight tips/examples with: <span style="color: #38BDF8;">টিপস/উদাহরণ</span>
-- For crucial principles, use callout boxes with relative font sizing and safe box-sizing:
-  - Concept Box: <div style="background: rgba(99,102,241,0.08); border-left: 3px solid #6366F1; border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 10px 0; color: #CBD5E1; width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: auto;">
-  - Tip/Shortcut: <div style="background: rgba(52,211,153,0.08); border-left: 3px solid #34D399; border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 10px 0; color: #CBD5E1; width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: auto;">
-  - Caution: <div style="background: rgba(239,68,68,0.08); border-left: 3px solid #EF4444; border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 10px 0; color: #CBD5E1; width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: auto;">
+CONCEPTS & CALLOUTS:
+- Highlight key terms with: <span class="term-badge">টার্ম</span>
+- Highlight definitions with: <span class="def-term">সংজ্ঞা</span>
+- Highlight warnings with: <span class="warn-term">সতর্কতা</span>
+- Highlight tips/examples with: <span class="tip-term">টিপস/উদাহরণ</span>
+- Callout boxes:
+  - Concept Box: <div class="concept-box">সংক্ষিপ্ত ধারণা বা মূল ভাব</div>
+  - Tip/Shortcut: <div class="tip-box"><span class="tip-term">টিপস:</span> গুরুত্বপূর্ণ শর্টকাট বা টেকনিক</div>
+  - Caution: <div class="caution-box"><span class="warn-term">সতর্কতা:</span> সচরাচর হওয়া ভুল বা ব্যতিক্রম</div>
 
 OUTPUT FORMAT:
 - Return ONLY the clean HTML snippet (no markdown fences, no \`\`\`html, no conversational text).
-- Wrap everything in: <div style="font-family: Inter, -apple-system, sans-serif; color: #CBD5E1; line-height: 1.75; font-size: 1em; width: 100%; max-width: 100%; box-sizing: border-box; word-break: break-word;">`
+- Wrap everything in: <div class="academic-note">`
 
 const NOTE_USER_PROMPT = (rawText: string, subjectName?: string, chapterName?: string) => {
   const contextParts = [
@@ -161,7 +157,7 @@ export default async (req: Request) => {
         'X-Title': 'ZyntraFocus',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-flash-lite',
         messages: [
           { role: 'system', content: NOTE_SYSTEM_PROMPT },
           { role: 'user', content: NOTE_USER_PROMPT(rawText, subjectName, chapterName) },
