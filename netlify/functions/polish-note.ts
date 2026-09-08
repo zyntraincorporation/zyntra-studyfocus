@@ -1,19 +1,22 @@
 /**
- * Netlify Serverless Function: polish-note
+ * Netlify Serverless Function: polish-note (Functions v2 with Response Streaming)
  *
  * Receives raw plain text / markdown note and converts it into
  * a beautiful, color-coded, exam-ready HTML snippet using AI.
  * The API key is NEVER exposed to the frontend.
  *
+ * Uses Server-Sent Events (SSE) streaming to bypass Netlify's 10-second
+ * synchronous timeout limit, supporting large payloads (8,500+ characters).
+ *
  * POST /.netlify/functions/polish-note
- * Body: { rawText: string }
- * Response: { html: string } | { error: string }
+ * Body: { rawText: string, subjectName?: string, chapterName?: string }
+ * Response: Server-Sent Events stream (text/event-stream)
  *
  * Environment variables (set in Netlify Dashboard):
  *   OPENROUTER_API_KEY -- your OpenRouter key
  */
 
-import type { Handler, HandlerEvent } from '@netlify/functions'
+import type { Config } from '@netlify/functions'
 
 const NOTE_SYSTEM_PROMPT = `You are an elite academic note architect and exam revision specialist for a dark-themed educational platform.
 Your task is to transform raw study notes (physics, chemistry, math, biology concepts, formulas, equations) into a masterclass interactive study guide in Bengali (বাংলা) optimized for fast exam revision.
@@ -75,53 +78,77 @@ const NOTE_USER_PROMPT = (rawText: string, subjectName?: string, chapterName?: s
   return `${context}নিচের স্টাডি নোটগুলোকে একটি নিখুঁত, সুন্দর ও সম্পূর্ণ বাংলা রিভিশন গাইডে রূপান্তর করো। প্রতিটি টপিক সংক্ষেপে পরিষ্কার বাংলায় বুঝিয়ে বলবে, কোনো টপিক বাদ দেবে না এবং সূত্রগুলো ফর্মুলা কার্ড সহ উপস্থাপন করবে:\n\n${rawText}`
 }
 
-export const handler: Handler = async (event: HandlerEvent) => {
+export default async (req: Request) => {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Content-Type': 'application/json',
   }
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: corsHeaders, body: '' }
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    })
   }
 
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: corsHeaders, body: JSON.stringify({ error: 'Method not allowed' }) }
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      },
+    })
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
-    return {
-      statusCode: 503,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'AI service is not configured on this server.' }),
-    }
+    return new Response(JSON.stringify({ error: 'AI service is not configured on this server.' }), {
+      status: 503,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      },
+    })
   }
 
   let rawText = ''
   let subjectName = ''
   let chapterName = ''
   try {
-    const body = JSON.parse(event.body ?? '{}')
+    const body = await req.json()
     rawText = typeof body.rawText === 'string' ? body.rawText.trim() : ''
     subjectName = typeof body.subjectName === 'string' ? body.subjectName.trim() : ''
     chapterName = typeof body.chapterName === 'string' ? body.chapterName.trim() : ''
   } catch {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'Invalid request body.' }) }
+    return new Response(JSON.stringify({ error: 'Invalid request body.' }), {
+      status: 400,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      },
+    })
   }
 
   if (!rawText) {
-    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: 'rawText is required.' }) }
+    return new Response(JSON.stringify({ error: 'rawText is required.' }), {
+      status: 400,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      },
+    })
   }
 
   if (rawText.length > 25000) {
-    return {
-      statusCode: 400,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'Input text is too long (max 25,000 characters).' }),
-    }
+    return new Response(JSON.stringify({ error: 'Input text is too long (max 25,000 characters).' }), {
+      status: 400,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      },
+    })
   }
 
   try {
@@ -141,50 +168,44 @@ export const handler: Handler = async (event: HandlerEvent) => {
         ],
         temperature: 0.3,
         max_tokens: 16000,
+        stream: true,
       }),
     })
 
     if (!response.ok) {
       const errText = await response.text()
       console.error('OpenRouter error:', response.status, errText)
-      return {
-        statusCode: 502,
-        headers: corsHeaders,
-        body: JSON.stringify({ error: 'AI service returned an error. Please try again.' }),
-      }
+      return new Response(JSON.stringify({ error: 'AI service returned an error. Please try again.' }), {
+        status: 502,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
+      })
     }
 
-    interface OpenRouterResponse {
-      choices?: { message?: { content?: string } }[]
-    }
-
-    const json = (await response.json()) as OpenRouterResponse
-    const content: string = json?.choices?.[0]?.message?.content ?? ''
-
-    if (!content.trim()) {
-      return {
-        statusCode: 502,
-        headers: corsHeaders,
-        body: JSON.stringify({ error: 'AI returned an empty response. Please try again.' }),
-      }
-    }
-
-    const html = content
-      .replace(/^```(?:html)?\s*/i, '')
-      .replace(/\s*```\s*$/, '')
-      .trim()
-
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: JSON.stringify({ html }),
-    }
+    return new Response(response.body, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
+    })
   } catch (err) {
     console.error('polish-note function error:', err)
-    return {
-      statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: 'An unexpected error occurred. Please try again.' }),
-    }
+    return new Response(JSON.stringify({ error: 'An unexpected error occurred. Please try again.' }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      },
+    })
   }
+}
+
+export const config: Config = {
+  path: '/.netlify/functions/polish-note',
 }

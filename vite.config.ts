@@ -97,6 +97,7 @@ OUTPUT FORMAT:
                   ],
                   temperature: 0.3,
                   max_tokens: 16000,
+                  stream: true,
                 }),
               })
 
@@ -108,16 +109,26 @@ OUTPUT FORMAT:
                 return
               }
 
-              interface OpenRouterResponse {
-                choices?: { message?: { content?: string } }[]
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+              res.setHeader('Cache-Control', 'no-cache, no-transform')
+              res.setHeader('Connection', 'keep-alive')
+              res.setHeader('X-Accel-Buffering', 'no')
+
+              const reader = response.body?.getReader()
+              if (!reader) {
+                res.end()
+                return
               }
 
-              const json = (await response.json()) as OpenRouterResponse
-              const content = json?.choices?.[0]?.message?.content ?? ''
-              const html = content.replace(/^```(?:html)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-              res.statusCode = 200
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ html }))
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) {
+                  res.end()
+                  break
+                }
+                res.write(value)
+              }
             } catch (err: any) {
               res.statusCode = 500
               res.setHeader('Content-Type', 'application/json')
@@ -178,7 +189,7 @@ export default defineConfig(({ mode }) => {
             },
           },
         ],
-        navigateFallbackDenylist: [/^\/api/],
+        navigateFallbackDenylist: [/^\/api/, /^\/\.netlify/],
       },
     }),
   ],

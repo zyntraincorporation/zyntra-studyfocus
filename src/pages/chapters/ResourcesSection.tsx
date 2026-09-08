@@ -278,9 +278,11 @@ function EmbedViewerModal({
 function NoteViewerModal({
   resource,
   onClose,
+  onEdit,
 }: {
   resource: ChapterResource
   onClose: () => void
+  onEdit?: () => void
 }) {
   const [zoom, setZoom] = useState<number>(100)
   const [isFullWidth, setIsFullWidth] = useState<boolean>(false)
@@ -304,6 +306,17 @@ function NoteViewerModal({
       onClose={onClose}
       extraAction={
         <div className="flex items-center gap-1 sm:gap-2">
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1 text-xs text-[#818CF8] bg-[#6366F1]/10 hover:bg-[#6366F1]/20 border border-[#6366F1]/30 px-2 sm:px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-medium"
+              title="Edit or Polish note"
+            >
+              <Sparkles size={12} className="text-[#818CF8]" />
+              <span className="hidden sm:inline">Edit / Polish</span>
+            </button>
+          )}
+
           {/* Zoom controls with Magnifying Glass */}
           <div className="flex items-center bg-[#17202A] border border-[#1E2A36] rounded-lg p-0.5">
             <button
@@ -357,8 +370,29 @@ function NoteViewerModal({
               zoom: `${zoom}%`,
               fontSize: `${Math.round(15 * (zoom / 100))}px`,
             }}
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
+          >
+            {!resource.htmlContent && (
+              <div className="mb-6 p-4 rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5 text-xs text-[#FDE68A]">
+                  <Sparkles size={16} className="shrink-0 text-[#F59E0B] mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-sm text-[#F59E0B]">সাধারণ টেক্সট নোট (Plain Text)</p>
+                    <p className="text-[#CBD5E1] mt-0.5">এই নোটটি সাধারণ টেক্সট হিসেবে সংরক্ষিত। বাংলায় সুন্দর রিভিশন গাইড ও ফর্মুলা কার্ড তৈরি করতে AI দিয়ে পলিশ করে নিন।</p>
+                  </div>
+                </div>
+                {onEdit && (
+                  <button
+                    onClick={onEdit}
+                    className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#F59E0B] text-[#0B0F14] text-xs font-bold hover:bg-[#FBBF24] transition-all shadow-lg shadow-[#F59E0B]/20 cursor-pointer"
+                  >
+                    <Sparkles size={13} />
+                    <span>✨ AI দিয়ে পলিশ করুন</span>
+                  </button>
+                )}
+              </div>
+            )}
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+          </div>
         </div>
       </div>
     </FullscreenViewer>
@@ -386,14 +420,23 @@ function ResourceFormModal({
   const [rawContent, setRawContent] = useState(initial?.rawContent ?? '')
   const [previewHtml, setPreviewHtml] = useState<string | null>(initial?.htmlContent ?? null)
   const [isPolishing, setIsPolishing] = useState(false)
+  const [polishProgress, setPolishProgress] = useState(0)
   const [polishError, setPolishError] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(!!initial?.htmlContent)
 
   const handlePolish = async () => {
     if (!rawContent.trim()) return
     setIsPolishing(true)
+    setPolishProgress(0)
     setPolishError(null)
-    const result = await callPolishNote(rawContent, subjectName, chapterName)
+    const result = await callPolishNote(
+      rawContent,
+      subjectName,
+      chapterName,
+      (streamed) => {
+        setPolishProgress(streamed.length)
+      }
+    )
     if ('error' in result) {
       setPolishError(result.error)
     } else {
@@ -401,6 +444,7 @@ function ResourceFormModal({
       setShowPreview(true)
     }
     setIsPolishing(false)
+    setPolishProgress(0)
   }
 
   const canSave = title.trim() && (
@@ -550,7 +594,11 @@ function ResourceFormModal({
                   disabled={!rawContent.trim() || rawContent.length > 25000}
                   leftIcon={<Sparkles size={13} />}
                 >
-                  {isPolishing ? 'Polishing in Bengali...' : '✨ Polish with AI (বাংলায় সাজান)'}
+                  {isPolishing
+                    ? (polishProgress > 0
+                        ? `AI লিখছে... (${polishProgress.toLocaleString()} অক্ষর)`
+                        : 'AI প্রস্তুত হচ্ছে...')
+                    : '✨ Polish with AI (বাংলায় সাজান)'}
                 </Button>
               </div>
             )}
@@ -587,7 +635,7 @@ function ResourceFormModal({
                 variant="secondary"
                 size="sm"
                 onClick={() => handleSave(true)}
-                disabled={!title.trim()}
+                disabled={!title.trim() || isPolishing}
               >
                 Save as-is
               </Button>
@@ -844,6 +892,11 @@ export default function ResourcesSection({
                               <Sparkles size={9} /> AI
                             </span>
                           )}
+                          {r.type === 'note' && !r.htmlContent && (
+                            <span className="text-[10px] text-[#94A3B8] bg-[#1E2A36] px-1.5 py-0.5 rounded-full font-medium">
+                              Raw Note
+                            </span>
+                          )}
                           {r.type !== 'note' && (
                             <ExternalLink size={10} className="text-[#475569]" />
                           )}
@@ -902,6 +955,12 @@ export default function ResourcesSection({
         <NoteViewerModal
           resource={viewingNote}
           onClose={() => setViewingNote(null)}
+          onEdit={isAdmin ? () => {
+            const r = viewingNote
+            setViewingNote(null)
+            setEditingResource(r)
+            setShowForm(true)
+          } : undefined}
         />
       )}
 
