@@ -4,6 +4,7 @@ import {
   Plus, Pencil, Trash2, ChevronLeft, Play,
   CheckCircle2, Star, Loader2, AlertCircle, CheckCircle,
   Sparkles, Clock, Paperclip, ExternalLink, GripVertical, FileText,
+  Code2, Eye, ClipboardCopy, Check, BookOpen,
 } from 'lucide-react'
 import {
   getSubject,
@@ -41,6 +42,98 @@ function isValidUrl(url: string): boolean {
 
 function newAttachment(): LectureAttachment {
   return { id: crypto.randomUUID(), title: '', url: '', type: 'other' }
+}
+
+// ── Lecture Note HTML helpers ──────────────────────────────────────────
+
+import DOMPurify from 'dompurify'
+import { renderMathInHtml } from '@/utils/mathRenderer'
+
+function sanitizeNoteHtml(html: string): string {
+  const clean = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'u', 's',
+      'code', 'pre', 'br', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'blockquote', 'sup', 'sub', 'caption', 'colgroup', 'col',
+      'details', 'summary', 'mark', 'small', 'figure', 'figcaption',
+      'section', 'article', 'aside', 'header', 'footer', 'main',
+    ],
+    ALLOWED_ATTR: ['style', 'class', 'colspan', 'rowspan', 'id', 'open'],
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'href', 'src'],
+  })
+  return renderMathInHtml(clean)
+}
+
+function stripNoteHtmlFences(raw: string): string {
+  const trimmed = raw.trim()
+  const m = trimmed.match(/^```(?:html)?\s*\n?([\s\S]*?)\n?```\s*$/)
+  if (m) return m[1].trim()
+  return trimmed
+}
+
+function buildLectureNotePrompt(lectureTitle?: string, subjectName?: string, chapterName?: string): string {
+  const ctx = [
+    lectureTitle && `লেকচার: ${lectureTitle}`,
+    subjectName && `বিষয়: ${subjectName}`,
+    chapterName && `অধ্যায়: ${chapterName}`,
+  ].filter(Boolean).join(' | ')
+
+  return `You are an elite academic note architect creating interactive study guides for ZyntraFocus — a dark-themed educational platform for Bangladeshi HSC & admission students.
+
+Transform my raw notes into a beautiful, fully interactive Bengali (বাংলা) study guide using the platform's CSS system.
+${ctx ? `\nCONTEXT: ${ctx}\n` : ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Write ALL explanations in Bengali (বাংলা). English terms in parentheses are fine.
+2. Use numbered sections, subheadings (h3/h4), concise bullet points — no long paragraphs.
+3. Cover EVERY topic completely. Never truncate.
+4. Use <details>/<summary> for lengthy sub-topics (collapsible).
+
+FORMULA CARDS:
+<div class="formula-card">
+  <div class="formula-name">সূত্রের নাম (English Name)</div>
+  <div class="formula-math">$$ \\LaTeX $$</div>
+  <div class="formula-vars">যেখানে: $x$ = অর্থ, $y$ = অর্থ</div>
+</div>
+
+CALLOUT BOXES:
+<div class="concept-box">মূল ধারণা</div>
+<div class="tip-box"><span class="tip-term">টিপস:</span> পরীক্ষার কৌশল</div>
+<div class="caution-box"><span class="warn-term">সতর্কতা:</span> সচরাচর ভুল</div>
+
+INLINE HIGHLIGHTS:
+<span class="term-badge">পরিভাষা</span>  <span class="def-term">সংজ্ঞা</span>  <span class="warn-term">সতর্কতা</span>  <span class="tip-term">টিপস</span>
+
+COLLAPSIBLE:
+<details style="margin:10px 0;background:#111820;border:1px solid #1E2A36;border-radius:10px;padding:2px 12px;">
+  <summary style="cursor:pointer;padding:8px 0;color:#818CF8;font-weight:600;list-style:none;">▶ বিষয়ের নাম</summary>
+  <div style="padding:8px 0 12px;color:#CBD5E1;">বিস্তারিত...</div>
+</details>
+
+OUTPUT: Return ONLY clean HTML — no markdown fences, no prose outside HTML.
+Wrap everything in: <div class="academic-note">...</div>
+
+[আপনার নোট এখানে paste করুন]`
+}
+
+function LectureNoteCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2500) } catch { /* ignore */ }
+  }
+  return (
+    <button type="button" onClick={handleCopy}
+      className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-all cursor-pointer font-medium whitespace-nowrap ${
+        copied ? 'bg-[#34D399]/15 text-[#34D399] border border-[#34D399]/30' : 'bg-[#38BDF8]/10 text-[#38BDF8] border border-[#38BDF8]/20 hover:bg-[#38BDF8]/20'
+      }`}
+    >
+      {copied ? <Check size={12} /> : <ClipboardCopy size={12} />}
+      {copied ? 'কপি হয়েছে ✓' : '📋 Claude Prompt'}
+    </button>
+  )
 }
 
 async function callCleanTimestamps(
@@ -225,6 +318,10 @@ export default function ChapterDetailPage() {
   // ── Attachments state ─────────────────────────────────────────────
   const [attachments, setAttachments] = useState<LectureAttachment[]>([])
 
+  // ── Lecture Note HTML state ────────────────────────────────────────
+  const [lectureNoteHtml, setLectureNoteHtml] = useState('')
+  const [noteHtmlView, setNoteHtmlView] = useState<'code' | 'preview'>('code')
+
   const { isLectureCompleted, getLectureProgress } = useProgressStats()
 
   const reload = useCallback(async () => {
@@ -254,6 +351,8 @@ export default function ChapterDetailPage() {
     setAiTimestampError(null)
     setShowTimestampRaw(true)
     setAttachments([])
+    setLectureNoteHtml('')
+    setNoteHtmlView('code')
   }
 
   const openAdd = () => {
@@ -266,9 +365,11 @@ export default function ChapterDetailPage() {
     setEditingLecture(l)
     setLectureTitle(l.title)
     setSlideUrl(l.slideUrl || '')
+    setLectureNoteHtml(l.noteHtml || '')
     setTimestamps(l.timestamps ?? [])
     setAttachments(l.attachments ?? [])
     setShowTimestampRaw(false)  // show editable list when editing existing lecture
+    setNoteHtmlView('code')
     setShowForm(true)
   }
 
@@ -323,12 +424,14 @@ export default function ChapterDetailPage() {
 
     // Validate attachments
     const validAttachments = attachments.filter((a) => a.title.trim() && a.url.trim() && isValidUrl(a.url))
+    const sanitizedNote = lectureNoteHtml.trim() ? sanitizeNoteHtml(lectureNoteHtml.trim()) : ''
 
     setIsSubmitting(true)
     if (editingLecture) {
       await updateLecture(user.uid, editingLecture.id, {
         title: lectureTitle,
         slideUrl: slideUrl.trim() || '',
+        noteHtml: sanitizedNote || undefined,
         timestamps: timestamps.length > 0 ? timestamps : [],
         attachments: validAttachments.length > 0 ? validAttachments : [],
       })
@@ -350,6 +453,7 @@ export default function ChapterDetailPage() {
           subjectId: subject.id,
           subjectName: subject.name,
           ...(slideUrl.trim() ? { slideUrl: slideUrl.trim() } : {}),
+          ...(sanitizedNote ? { noteHtml: sanitizedNote } : {}),
           ...(timestamps.length > 0 ? { timestamps } : {}),
           ...(validAttachments.length > 0 ? { attachments: validAttachments } : {}),
         },
@@ -472,6 +576,7 @@ export default function ChapterDetailPage() {
                       {l.isImportant && <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />}
                       {hasAtt && <Paperclip size={12} className="text-[#64748B] shrink-0" aria-label="Has attachments" />}
                       {hasTs && <Clock size={12} className="text-[#64748B] shrink-0" aria-label="Has timestamps" />}
+                      {l.noteHtml && <BookOpen size={12} className="text-[#38BDF8] shrink-0" aria-label="Has interactive note" />}
                     </div>
                     <p className="text-xs text-[#64748B] mt-0.5">{l.channelName} · {l.durationFormatted}</p>
                   </div>
@@ -612,7 +717,91 @@ export default function ChapterDetailPage() {
             </p>
           </div>
 
+          {/* ── Lecture Interactive Note (HTML) ── */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <label className="text-sm font-medium text-[#F8FAFC] flex items-center gap-1.5">
+                <BookOpen size={14} className="text-[#38BDF8]" /> Interactive Lecture Note
+                <span className="text-xs text-[#64748B] font-normal">(HTML — দেখাবে video-র নিচে)</span>
+              </label>
+              <LectureNoteCopyButton text={buildLectureNotePrompt(lectureTitle, subject?.name, chapter?.name)} />
+            </div>
+
+            {/* Info bar */}
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-[#0B0F14] border border-[#38BDF8]/20 text-[11px] text-[#94A3B8]">
+              <BookOpen size={13} className="text-[#38BDF8] shrink-0 mt-0.5" />
+              <span>Claude/GPT থেকে HTML লিখিয়ে paste করুন। প্রতিটি lecture-এর নিজস্ব dedicated note। Watch page-এ <strong className="text-[#F8FAFC]">Slide | Note</strong> ট্যাব দিয়ে switch করা যাবে।</span>
+            </div>
+
+            {/* Code / Preview tab bar */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center bg-[#0B0F14] border border-[#1E2A36] rounded-lg p-0.5 gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setNoteHtmlView('code')}
+                  className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition-all cursor-pointer ${
+                    noteHtmlView === 'code' ? 'bg-[#1E2A36] text-[#F8FAFC]' : 'text-[#64748B] hover:text-[#94A3B8]'
+                  }`}
+                >
+                  <Code2 size={11} /> Code
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNoteHtmlView('preview')}
+                  className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition-all cursor-pointer ${
+                    noteHtmlView === 'preview' ? 'bg-[#1E2A36] text-[#F8FAFC]' : 'text-[#64748B] hover:text-[#94A3B8]'
+                  }`}
+                >
+                  <Eye size={11} /> Live Preview
+                </button>
+              </div>
+              {lectureNoteHtml.trim() && (
+                <span className="text-[10px] text-[#475569] font-mono">
+                  {(new Blob([lectureNoteHtml]).size / 1024).toFixed(1)} KB
+                </span>
+              )}
+            </div>
+
+            {/* Code textarea */}
+            {noteHtmlView === 'code' && (
+              <div className="space-y-1">
+                <textarea
+                  value={lectureNoteHtml}
+                  onChange={(e) => setLectureNoteHtml(stripNoteHtmlFences(e.target.value))}
+                  placeholder={`Claude থেকে HTML paste করুন...\n\n<div class="academic-note">\n  <h2>লেকচারের শিরোনাম</h2>\n  <div class="formula-card">...</div>\n  <div class="concept-box">...</div>\n</div>\n\n💡 \`\`\`html ফেন্স সহ paste করলেও অটোমেটিক strip হয়।`}
+                  className="w-full bg-[#080C12] border border-[#1E2A36] focus:border-[#38BDF8]/40 rounded-xl px-3 py-2.5 text-xs text-[#A5B4FC] placeholder-[#2D3A4A] resize-none focus:outline-none focus:ring-1 focus:ring-[#38BDF8]/30 h-48 font-mono leading-relaxed"
+                  spellCheck={false}
+                />
+                <p className="text-[10px] text-[#334155]">
+                  Markdown fences (```html ... ```) paste করলে অটোমেটিক remove হয়।
+                </p>
+              </div>
+            )}
+
+            {/* Live preview */}
+            {noteHtmlView === 'preview' && (
+              lectureNoteHtml.trim() ? (
+                <div
+                  className="bg-[#080C12] border border-[#1E2A36] rounded-xl p-4 max-h-64 overflow-y-auto"
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeNoteHtml(
+                      lectureNoteHtml.trim().startsWith('<div class="academic-note"')
+                        ? lectureNoteHtml
+                        : `<div class="academic-note">${lectureNoteHtml}</div>`
+                    )
+                  }}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 h-28 border border-dashed border-[#1E2A36] rounded-xl text-[#334155]">
+                  <Eye size={20} />
+                  <p className="text-xs text-center">Code ট্যাবে HTML paste করুন, এখানে Live Preview দেখুন</p>
+                </div>
+              )
+            )}
+          </div>
+
           {/* ── Timestamps section ── */}
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-[#F8FAFC] flex items-center gap-1.5">

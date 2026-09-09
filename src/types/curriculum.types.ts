@@ -34,7 +34,8 @@ export interface ChapterResource {
   type: ChapterResourceType
   url?: string              // for pdf / link types
   rawContent?: string       // original plain text / markdown (note type)
-  htmlContent?: string      // AI-polished HTML output (note type)
+  htmlContent?: string      // AI-polished or custom HTML output (note type)
+  isCustomHtml?: boolean    // true = manually pasted HTML (no AI), false/undefined = AI-polished
   createdAt: number         // Date.now()
 }
 
@@ -90,6 +91,7 @@ export interface Lecture {
   isActive: boolean
   videoStatus: VideoStatus
   slideUrl?: string
+  noteHtml?: string           // per-lecture interactive HTML note (sanitized)
   timestamps?: LectureTimestamp[]
   attachments?: LectureAttachment[]
   createdAt: Timestamp
@@ -126,6 +128,7 @@ export type LectureInput = {
   subjectId: string
   subjectName: string
   slideUrl?: string
+  noteHtml?: string
   timestamps?: LectureTimestamp[]
   attachments?: LectureAttachment[]
 }

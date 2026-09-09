@@ -86,6 +86,7 @@ export async function restoreTrashedItem(
         ...(item.url ? { url: item.url } : {}),
         ...(item.rawContent ? { rawContent: item.rawContent } : {}),
         ...(item.htmlContent ? { htmlContent: item.htmlContent } : {}),
+        ...(item.isCustomHtml ? { isCustomHtml: item.isCustomHtml } : {}),
       }
 
       // Add back if not already there

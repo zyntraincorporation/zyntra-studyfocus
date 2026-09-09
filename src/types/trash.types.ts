@@ -12,6 +12,7 @@ export interface TrashedItem {
   chapterName?: string
   rawContent?: string
   htmlContent?: string
+  isCustomHtml?: boolean
   url?: string
   createdAt: number
   deletedAt: number
