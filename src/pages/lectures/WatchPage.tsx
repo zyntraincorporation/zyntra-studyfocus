@@ -61,6 +61,25 @@ function sanitizeWatchNote(html: string): string {
   return renderMathInHtml(clean)
 }
 
+/**
+ * StableHtmlNote — renders sanitized HTML via a ref so that parent re-renders
+ * (e.g. the 1-second polling interval that updates currentTime) never reset the
+ * DOM. This preserves <details> open/closed state across re-renders.
+ */
+function StableHtmlNote({ html, className, style }: { html: string; className?: string; style?: React.CSSProperties }) {
+  const elRef = useRef<HTMLDivElement>(null)
+  const prevHtmlRef = useRef<string>('')
+
+  useEffect(() => {
+    if (!elRef.current) return
+    if (prevHtmlRef.current === html) return   // nothing changed — keep DOM untouched
+    prevHtmlRef.current = html
+    elRef.current.innerHTML = html
+  }, [html])
+
+  return <div ref={elRef} className={className} style={style} />
+}
+
 // ── Error messages ────────────────────────────────────────────────────
 const PLAYER_ERRORS: Record<number, string> = {
   2: 'Invalid video — please check the YouTube URL.',
@@ -222,9 +241,11 @@ export default function WatchPage() {
   const [attachOpen, setAttachOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [slideModalOpen, setSlideModalOpen] = useState(false)
-  const [contentTab, setContentTab] = useState<'slide' | 'note'>('slide')
+  const [contentTab, setContentTab] = useState<'slide' | 'note' | 'split'>('slide')
   const [noteFullscreen, setNoteFullscreen] = useState(false)
   const [noteHalfPage, setNoteHalfPage] = useState(false)
+  const [noteFullWidth, setNoteFullWidth] = useState(false)
+  const [noteModalFullWidth, setNoteModalFullWidth] = useState(false)
   const [noteZoom, setNoteZoom] = useState(100)
 
   // ── Side panel ────────────────────────────────────────────────────
@@ -1842,42 +1863,77 @@ export default function WatchPage() {
                           <span>Interactive Note</span>
                         </button>
                       )}
+                      {/* Split view: only when both slide and note exist */}
+                      {lecture.slideUrl && lecture.noteHtml && (
+                        <button
+                          type="button"
+                          onClick={() => setContentTab('split')}
+                          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+                            contentTab === 'split'
+                              ? 'bg-[#34D399] text-[#0B0F14] font-semibold shadow-sm shadow-[#34D399]/30'
+                              : 'text-[#64748B] hover:text-[#94A3B8]'
+                          }`}
+                          title="Split view: Slide + Note side by side"
+                        >
+                          <Minimize2 size={13} />
+                          <span className="hidden sm:inline">Split Notes</span>
+                          <span className="sm:hidden">Split</span>
+                        </button>
+                      )}
                     </div>
 
-                    {/* View Controls (Expand, Full Page, Half Page) */}
+                    {/* View Controls */}
                     <div className="flex items-center gap-1.5">
                       {contentTab === 'slide' && lecture.slideUrl && (
                         <button
                           onClick={() => setSlideModalOpen(true)}
                           className="flex items-center gap-1 text-xs text-[#818CF8] hover:text-white px-2.5 py-1.5 rounded-lg bg-[#6366F1]/10 hover:bg-[#6366F1]/20 transition-colors font-medium cursor-pointer"
-                          title="Open Slide Fullscreen (Video pauses not required)"
+                          title="Open Slide Fullscreen"
                         >
                           <Maximize size={12} />
                           <span>Full Screen</span>
                         </button>
                       )}
 
-                      {contentTab === 'note' && lecture.noteHtml && (
+                      {(contentTab === 'note' || contentTab === 'split') && lecture.noteHtml && (
                         <>
-                          {/* Half Page Toggle */}
-                          <button
-                            onClick={() => setNoteHalfPage(prev => !prev)}
-                            className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors font-medium cursor-pointer ${
-                              noteHalfPage
-                                ? 'bg-[#38BDF8]/20 border-[#38BDF8]/40 text-[#38BDF8]'
-                                : 'bg-[#17202A] border-[#1E2A36] text-[#94A3B8] hover:text-[#F8FAFC]'
-                            }`}
-                            title={noteHalfPage ? 'Switch to Full Height' : 'Switch to Compact Half Page View'}
-                          >
-                            {noteHalfPage ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
-                            <span className="hidden sm:inline">{noteHalfPage ? 'Full Height' : 'Half Page'}</span>
-                          </button>
+                          {/* Half Page Toggle — only in single-note tab */}
+                          {contentTab === 'note' && (
+                            <button
+                              onClick={() => setNoteHalfPage(prev => !prev)}
+                              className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors font-medium cursor-pointer ${
+                                noteHalfPage
+                                  ? 'bg-[#38BDF8]/20 border-[#38BDF8]/40 text-[#38BDF8]'
+                                  : 'bg-[#17202A] border-[#1E2A36] text-[#94A3B8] hover:text-[#F8FAFC]'
+                              }`}
+                              title={noteHalfPage ? 'Switch to Full Height' : 'Switch to Compact Half Page View'}
+                            >
+                              {noteHalfPage ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                              <span className="hidden sm:inline">{noteHalfPage ? 'Full Height' : 'Half Page'}</span>
+                            </button>
+                          )}
 
-                          {/* Full Page Overlay (video keeps playing in background!) */}
+                          {/* Full Width Toggle */}
+                          {contentTab === 'note' && (
+                            <button
+                              onClick={() => setNoteFullWidth(prev => !prev)}
+                              className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-colors font-medium cursor-pointer ${
+                                noteFullWidth
+                                  ? 'bg-[#34D399]/20 border-[#34D399]/40 text-[#34D399]'
+                                  : 'bg-[#17202A] border-[#1E2A36] text-[#94A3B8] hover:text-[#F8FAFC]'
+                              }`}
+                              title={noteFullWidth ? 'Switch to Reading Width' : 'Expand to Full Page Width'}
+                            >
+                              {noteFullWidth ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                              <span className="hidden sm:inline">{noteFullWidth ? 'Fit Column' : 'Full Width'}</span>
+                            </button>
+                          )}
+
+                          {/* Full Page Overlay */}
                           <button
                             onClick={() => setNoteFullscreen(true)}
                             className="flex items-center gap-1 text-xs text-[#38BDF8] hover:text-white px-2.5 py-1.5 rounded-lg bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 transition-colors font-semibold cursor-pointer"
-                            title="Open Note in Full Overlay Mode (Video will not stop)"
+                            title="Open Note in Full Overlay Mode (Video keeps playing)"
                           >
                             <Maximize size={12} />
                             <span>Full Page</span>
@@ -1887,7 +1943,7 @@ export default function WatchPage() {
                     </div>
                   </div>
 
-                  {/* Tab 1: Slide Content */}
+                  {/* Tab 1: Slide only */}
                   {contentTab === 'slide' && lecture.slideUrl && (
                     <div
                       className="w-full overflow-hidden relative bg-[#0B0F14] border-t border-[#1E2A36]"
@@ -1903,24 +1959,53 @@ export default function WatchPage() {
                     </div>
                   )}
 
-                  {/* Tab 2: Interactive Note Content */}
+                  {/* Tab 2: Interactive Note only */}
                   {contentTab === 'note' && lecture.noteHtml && (
                     <div
                       className={`w-full overflow-y-auto bg-[#080C12] transition-all duration-200 border-t border-[#1E2A36] ${
                         noteHalfPage ? 'max-h-[50vh]' : 'max-h-[85vh]'
                       }`}
                     >
-                      <div className="max-w-4xl mx-auto px-4 sm:px-8 py-6 selection:bg-[#6366F1]/30">
-                        <div
+                      <div className={`mx-auto px-4 sm:px-8 py-6 selection:bg-[#6366F1]/30 ${
+                        noteFullWidth ? 'max-w-none' : 'max-w-4xl'
+                      }`}>
+                        <StableHtmlNote
                           className="academic-note"
-                          dangerouslySetInnerHTML={{
-                            __html: sanitizeWatchNote(
+                          html={sanitizeWatchNote(
+                            lecture.noteHtml.trim().startsWith('<div class="academic-note"')
+                              ? lecture.noteHtml
+                              : `<div class="academic-note">${lecture.noteHtml}</div>`
+                          )}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tab 3: Split — Slide + Note side by side, each independently scrollable */}
+                  {contentTab === 'split' && lecture.slideUrl && lecture.noteHtml && (
+                    <div className="flex border-t border-[#1E2A36] w-full" style={{ height: '80vh' }}>
+                      {/* Left: Slide */}
+                      <div className="w-1/2 h-full overflow-hidden border-r border-[#1E2A36] bg-[#0B0F14] relative flex-shrink-0">
+                        <iframe
+                          src={toSlideEmbedUrl(lecture.slideUrl)}
+                          allow="autoplay"
+                          loading="lazy"
+                          title="Lecture Slide"
+                          className="w-full h-full border-none bg-[#0B0F14] block"
+                        />
+                      </div>
+                      {/* Right: Note — scrolls independently */}
+                      <div className="w-1/2 h-full overflow-y-auto bg-[#080C12] overscroll-contain">
+                        <div className="px-4 sm:px-6 py-5 selection:bg-[#6366F1]/30">
+                          <StableHtmlNote
+                            className="academic-note"
+                            html={sanitizeWatchNote(
                               lecture.noteHtml.trim().startsWith('<div class="academic-note"')
                                 ? lecture.noteHtml
                                 : `<div class="academic-note">${lecture.noteHtml}</div>`
-                            )
-                          }}
-                        />
+                            )}
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -2035,6 +2120,20 @@ export default function WatchPage() {
                 </button>
               </div>
 
+              {/* Full Width Toggle */}
+              <button
+                onClick={() => setNoteModalFullWidth(prev => !prev)}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                  noteModalFullWidth
+                    ? 'bg-[#38BDF8]/15 border-[#38BDF8]/40 text-[#38BDF8]'
+                    : 'border-[#1E2A36] text-[#64748B] hover:text-[#F8FAFC] hover:bg-[#111820]'
+                }`}
+                title={noteModalFullWidth ? 'Switch to Reading Width' : 'Expand to Full Page Width'}
+              >
+                {noteModalFullWidth ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                <span className="hidden sm:inline">{noteModalFullWidth ? 'Fit Column' : 'Full Width'}</span>
+              </button>
+
               {/* Close Button */}
               <button
                 onClick={() => setNoteFullscreen(false)}
@@ -2050,21 +2149,21 @@ export default function WatchPage() {
           {/* Note Scroll Content */}
           <div className="flex-1 w-full overflow-y-auto bg-[#080C12]" style={{ minHeight: 0 }}>
             <div
-              className="max-w-4xl mx-auto px-4 sm:px-8 md:px-12 py-8 selection:bg-[#6366F1]/30"
+              className={`mx-auto px-4 sm:px-8 md:px-12 py-8 selection:bg-[#6366F1]/30 transition-all duration-200 ${
+                noteModalFullWidth ? 'max-w-none' : 'max-w-4xl'
+              }`}
               style={{
                 zoom: `${noteZoom}%`,
                 fontSize: `${Math.round(15 * (noteZoom / 100))}px`,
               }}
             >
-              <div
+              <StableHtmlNote
                 className="academic-note"
-                dangerouslySetInnerHTML={{
-                  __html: sanitizeWatchNote(
-                    lecture.noteHtml.trim().startsWith('<div class="academic-note"')
-                      ? lecture.noteHtml
-                      : `<div class="academic-note">${lecture.noteHtml}</div>`
-                  )
-                }}
+                html={sanitizeWatchNote(
+                  lecture.noteHtml.trim().startsWith('<div class="academic-note"')
+                    ? lecture.noteHtml
+                    : `<div class="academic-note">${lecture.noteHtml}</div>`
+                )}
               />
             </div>
           </div>

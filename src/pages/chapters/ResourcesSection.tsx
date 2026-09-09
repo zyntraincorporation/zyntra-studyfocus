@@ -38,6 +38,24 @@ function sanitizeHtml(html: string): string {
   return renderMathInHtml(clean)
 }
 
+/**
+ * StableHtmlNote — sets innerHTML via ref/useEffect so parent re-renders
+ * (zoom, fullWidth, AI streaming state) never reset <details> open state.
+ */
+function StableHtmlNote({ html, className }: { html: string; className?: string }) {
+  const elRef = useRef<HTMLDivElement>(null)
+  const prevHtmlRef = useRef<string>('')
+
+  useEffect(() => {
+    if (!elRef.current) return
+    if (prevHtmlRef.current === html) return  // unchanged — keep DOM as-is
+    prevHtmlRef.current = html
+    elRef.current.innerHTML = html
+  }, [html])
+
+  return <div ref={elRef} className={className} />
+}
+
 /** Strip markdown code fences: ```html ... ``` or ``` ... ``` */
 function stripMarkdownFences(raw: string): string {
   const trimmed = raw.trim()
@@ -477,7 +495,7 @@ function NoteViewerModal({
                 )}
               </div>
             )}
-            <div dangerouslySetInnerHTML={{ __html: html }} />
+            <StableHtmlNote html={html} />
           </div>
         </div>
       </div>
