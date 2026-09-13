@@ -64,6 +64,8 @@
   html {
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
+    /* Prevent horizontal overflow on mobile */
+    overflow-x: hidden;
   }
 
   body {
@@ -75,6 +77,10 @@
     background-color: var(--color-bg-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Prevent horizontal overflow on mobile */
+    overflow-x: hidden;
+    /* Improve tap responsiveness */
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* Light mode */
@@ -113,10 +119,26 @@
   ::-webkit-scrollbar-thumb:hover {
     background: #2D3B4D;
   }
+  /* Prevent zoom on input focus on iOS (inputs need font-size >= 16px or this fix) */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='search'],
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
 }
 
 /* ── Utility classes ─────────────────────────────────────────────── */
 @layer utilities {
+  /* Safe-area bottom padding for bottom nav (iOS home indicator) */
+  .safe-area-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
   .surface {
     background-color: var(--color-bg-surface);
   }

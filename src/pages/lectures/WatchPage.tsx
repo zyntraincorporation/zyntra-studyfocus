@@ -150,7 +150,7 @@ function ControlDropdown({
   return (
     <div
       data-dropdown
-      className="absolute bottom-full mb-2 right-0 bg-[#0B0F14] border border-[#1E2A36] rounded-xl shadow-xl py-1 z-50 min-w-max max-h-64 overflow-y-auto"
+      className="absolute bottom-full mb-2 right-0 bg-[#0B0F14] border border-[#1E2A36] rounded-xl shadow-xl py-1 z-50 min-w-max max-h-[70vh] overflow-y-auto"
     >
       {children}
     </div>
@@ -790,10 +790,27 @@ export default function WatchPage() {
     togglePlay()
   }
 
-  const toggleFullscreen = useCallback(() => {
+  const toggleFullscreen = useCallback(async () => {
     if (!containerRef.current) return
-    if (!document.fullscreenElement) containerRef.current.requestFullscreen()
-    else document.exitFullscreen()
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current.requestFullscreen()
+        if (screen.orientation && screen.orientation.lock) {
+          try {
+            await screen.orientation.lock('landscape')
+          } catch (e) { /* ignore */ }
+        }
+      } else {
+        await document.exitFullscreen()
+        if (screen.orientation && screen.orientation.unlock) {
+          try {
+            screen.orientation.unlock()
+          } catch (e) { /* ignore */ }
+        }
+      }
+    } catch (err) {
+      console.warn('Fullscreen error:', err)
+    }
   }, [])
 
   const openPanel = useCallback((tab: SidePanelTab) => {
@@ -1787,7 +1804,7 @@ export default function WatchPage() {
 
                 {/* ── Side panel (overlay inside video container for BOTH normal & fullscreen mode) ── */}
                 <aside
-                  className={`absolute top-0 right-0 bottom-0 w-72 sm:w-80 bg-[#0B0F14]/96 backdrop-blur-md border-l border-[#1E2A36] flex flex-col overflow-hidden z-35 transition-transform duration-300 ease-in-out shadow-2xl ${
+                  className={`absolute top-0 right-0 bottom-0 w-72 sm:w-80 max-w-full bg-[#0B0F14]/96 backdrop-blur-md border-l border-[#1E2A36] flex flex-col overflow-hidden z-35 transition-transform duration-300 ease-in-out shadow-2xl ${
                     panelOpen ? 'translate-x-0' : 'translate-x-full pointer-events-none'
                   }`}
                   onClick={(e) => e.stopPropagation()}
@@ -1981,11 +1998,11 @@ export default function WatchPage() {
                     </div>
                   )}
 
-                  {/* Tab 3: Split — Slide + Note side by side, each independently scrollable */}
+                  {/* Tab 3: Split — Slide + Note side by side on desktop, stacked on mobile */}
                   {contentTab === 'split' && lecture.slideUrl && lecture.noteHtml && (
-                    <div className="flex border-t border-[#1E2A36] w-full" style={{ height: '80vh' }}>
-                      {/* Left: Slide */}
-                      <div className="w-1/2 h-full overflow-hidden border-r border-[#1E2A36] bg-[#0B0F14] relative flex-shrink-0">
+                    <div className="flex flex-col md:flex-row border-t border-[#1E2A36] w-full h-[85vh] md:h-[80vh]">
+                      {/* Left/Top: Slide */}
+                      <div className="w-full md:w-1/2 h-1/2 md:h-full overflow-hidden border-b md:border-b-0 md:border-r border-[#1E2A36] bg-[#0B0F14] relative flex-shrink-0">
                         <iframe
                           src={toSlideEmbedUrl(lecture.slideUrl)}
                           allow="autoplay"
@@ -1994,8 +2011,8 @@ export default function WatchPage() {
                           className="w-full h-full border-none bg-[#0B0F14] block"
                         />
                       </div>
-                      {/* Right: Note — scrolls independently */}
-                      <div className="w-1/2 h-full overflow-y-auto bg-[#080C12] overscroll-contain">
+                      {/* Right/Bottom: Note — scrolls independently */}
+                      <div className="w-full md:w-1/2 h-1/2 md:h-full overflow-y-auto bg-[#080C12] overscroll-contain">
                         <div className="px-4 sm:px-6 py-5 selection:bg-[#6366F1]/30">
                           <StableHtmlNote
                             className="academic-note"

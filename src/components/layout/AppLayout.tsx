@@ -5,7 +5,7 @@ import Header from './Header'
 
 export default function AppLayout() {
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0B0F14]">
+    <div className="flex h-screen h-[100dvh] overflow-hidden bg-[#0B0F14]">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-60 shrink-0">
         <Sidebar />
@@ -14,7 +14,7 @@ export default function AppLayout() {
       {/* Main content */}
       <div className="flex flex-col flex-1 min-w-0">
         <Header />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
           <div className="p-4 md:p-6 max-w-7xl mx-auto pb-24 md:pb-6">
             <Outlet />
           </div>
@@ -28,3 +28,4 @@ export default function AppLayout() {
     </div>
   )
 }
+
