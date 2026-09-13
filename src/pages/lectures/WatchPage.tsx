@@ -1358,7 +1358,7 @@ export default function WatchPage() {
         {/* Captions / Subtitles Button */}
         <button
           onClick={toggleCaptions}
-          className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
+          className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs ${
             isCaptionsOn ? 'text-[#818CF8] bg-[#6366F1]/20 font-bold' : 'text-white/70 hover:text-white hover:bg-white/10'
           }`}
           title={isCaptionsOn ? 'Disable Subtitles (C)' : 'Enable Subtitles (C)'}
@@ -1431,7 +1431,7 @@ export default function WatchPage() {
         {/* Notes */}
         <button
           onClick={() => openPanel('notes')}
-          className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
+          className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs ${
             panelOpen && activeTab === 'notes' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
           }`}
           title="Notes (N)"
@@ -1444,7 +1444,7 @@ export default function WatchPage() {
         {/* Bookmarks */}
         <button
           onClick={() => openPanel('bookmarks')}
-          className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
+          className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs ${
             panelOpen && activeTab === 'bookmarks' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
           }`}
           title="Bookmarks (B)"
@@ -1458,7 +1458,7 @@ export default function WatchPage() {
         {hasTimestamps && (
           <button
             onClick={() => openPanel('timestamps')}
-            className={`${ctrlBtn} px-1.5 rounded-lg text-xs ${
+            className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs ${
               panelOpen && activeTab === 'timestamps' ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
             }`}
             title="Timestamps (T)"
@@ -1475,7 +1475,7 @@ export default function WatchPage() {
               setContentTab('slide')
               setSlideModalOpen(true)
             }}
-            className={`${ctrlBtn} px-1.5 rounded-lg text-xs text-[#818CF8] bg-[#6366F1]/10 hover:text-white hover:bg-[#6366F1]/20 font-medium transition-colors`}
+            className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs text-[#818CF8] bg-[#6366F1]/10 hover:text-white hover:bg-[#6366F1]/20 font-medium transition-colors`}
             title="Lecture Slide (S)"
             aria-label="Lecture Slide (S)"
           >
@@ -1491,7 +1491,7 @@ export default function WatchPage() {
               setContentTab('note')
               setNoteFullscreen(true)
             }}
-            className={`${ctrlBtn} px-1.5 rounded-lg text-xs text-[#38BDF8] bg-[#38BDF8]/10 hover:text-white hover:bg-[#38BDF8]/20 font-medium transition-colors`}
+            className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs text-[#38BDF8] bg-[#38BDF8]/10 hover:text-white hover:bg-[#38BDF8]/20 font-medium transition-colors`}
             title="Lecture Note (Interactive)"
             aria-label="Lecture Note"
           >
@@ -1502,7 +1502,7 @@ export default function WatchPage() {
 
         {/* Attachments */}
         {hasAttachments && (
-          <div className="relative" data-dropdown>
+          <div className={`relative ${!isFullscreen ? 'max-sm:hidden' : ''}`} data-dropdown>
             <button
               onClick={() => { setAttachOpen(!attachOpen); setSpeedOpen(false); setQualityOpen(false); setMoreOpen(false) }}
               className={`${ctrlBtn} px-1.5 rounded-lg ${
@@ -1963,8 +1963,7 @@ export default function WatchPage() {
                   {/* Tab 1: Slide only */}
                   {contentTab === 'slide' && lecture.slideUrl && (
                     <div
-                      className="w-full overflow-hidden relative bg-[#0B0F14] border-t border-[#1E2A36]"
-                      style={{ paddingTop: '56.25%' /* 16:9 */ }}
+                      className="w-full overflow-hidden relative bg-[#0B0F14] border-t border-[#1E2A36] h-[75vh]"
                     >
                       <iframe
                         src={toSlideEmbedUrl(lecture.slideUrl)}
