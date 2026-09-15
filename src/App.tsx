@@ -20,6 +20,7 @@ const NotesPage = lazy(() => import('@/pages/notes/NotesPage'))
 const BookmarksPage = lazy(() => import('@/pages/bookmarks/BookmarksPage'))
 const AnalyticsPage = lazy(() => import('@/pages/analytics/AnalyticsPage'))
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
+const TimerPage = lazy(() => import('@/pages/timer/TimerPage'))
 
 // Error
 const NotFoundPage = lazy(() => import('@/pages/errors/NotFoundPage'))
@@ -46,6 +47,7 @@ export default function App() {
             <Route path={ROUTES.BOOKMARKS} element={<BookmarksPage />} />
             <Route path={ROUTES.ANALYTICS} element={<AnalyticsPage />} />
             <Route path={ROUTES.SETTINGS} element={<SettingsPage />} />
+            <Route path={ROUTES.TIMER} element={<TimerPage />} />
           </Route>
 
           {/* Watch page — full screen, no AppLayout chrome */}

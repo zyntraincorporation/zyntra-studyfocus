@@ -26,4 +26,6 @@ export interface StudySession {
   endedAt: Timestamp
   duration: number
   dateKey: string // 'YYYY-MM-DD' in user's local timezone
+  timerMode?: 'pomodoro-25' | 'pomodoro-45' | 'free-timer' // source of session
+  topic?: string  // what the user was studying (free text)
 }

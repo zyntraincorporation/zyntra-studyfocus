@@ -17,6 +17,7 @@ export const ROUTES = {
   BOOKMARKS: '/bookmarks',
   ANALYTICS: '/analytics',
   SETTINGS: '/settings',
+  TIMER: '/timer',
 } as const
 
 // Helper: build a dynamic route by replacing :param tokens

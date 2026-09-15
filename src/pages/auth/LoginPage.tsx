@@ -1,16 +1,32 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { signIn } from '@/services/auth.service'
+import { useAuth } from '@/contexts/AuthContext'
+import { ROUTES } from '@/constants/routes'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import appIcon from '@/assets/icon.jpg'
 
 export default function LoginPage() {
+  const { user, isLoading: isAuthLoading } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || ROUTES.DASHBOARD
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (user && !isAuthLoading) {
+      navigate(from, { replace: true })
+    }
+  }, [user, isAuthLoading, navigate, from])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -18,6 +34,7 @@ export default function LoginPage() {
     setIsLoading(true)
     try {
       await signIn(email.trim(), password)
+      navigate(from, { replace: true })
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? ''
       if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
@@ -32,6 +49,14 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (isAuthLoading) {
+    return <LoadingScreen />
+  }
+
+  if (user) {
+    return null
   }
 
   return (

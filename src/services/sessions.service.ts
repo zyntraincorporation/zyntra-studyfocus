@@ -22,18 +22,25 @@ export async function createSession(
     subjectName: string
     startedAt: Date
     endedAt: Date
+    timerMode?: 'pomodoro-25' | 'pomodoro-45' | 'free-timer'
+    topic?: string
   }
 ): Promise<void> {
   const duration = Math.round((data.endedAt.getTime() - data.startedAt.getTime()) / 1000)
-  if (duration < 10) return // ignore trivial sessions
+  if (duration <= 0) return
 
-  await addDoc(collection(db, COLLECTIONS.USERS, userId, SUBCOLLECTIONS.STUDY_SESSIONS), {
+  const payload: Record<string, unknown> = {
     ...data,
     duration,
     dateKey: getLocalDateKey(data.startedAt),
     startedAt: Timestamp.fromDate(data.startedAt),
     endedAt: Timestamp.fromDate(data.endedAt),
-  })
+  }
+  // Remove undefined fields so Firestore doesn't reject them
+  if (!payload.timerMode) delete payload.timerMode
+  if (!payload.topic) delete payload.topic
+
+  await addDoc(collection(db, COLLECTIONS.USERS, userId, SUBCOLLECTIONS.STUDY_SESSIONS), payload)
 }
 
 export async function getSessionsByDateRange(

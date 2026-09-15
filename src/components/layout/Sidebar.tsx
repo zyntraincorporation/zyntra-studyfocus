@@ -7,6 +7,7 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  Timer,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { ROUTES } from '@/constants/routes'
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { to: ROUTES.NOTES, icon: FileText, label: 'Notes' },
   { to: ROUTES.BOOKMARKS, icon: Bookmark, label: 'Bookmarks' },
   { to: ROUTES.ANALYTICS, icon: BarChart3, label: 'Analytics' },
+  { to: ROUTES.TIMER, icon: Timer, label: 'Focus Timer' },
   { to: ROUTES.SETTINGS, icon: Settings, label: 'Settings' },
 ]
 

@@ -1,13 +1,13 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, BookOpen, FileText, Bookmark, Settings } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FileText, Bookmark, Timer } from 'lucide-react'
 import { ROUTES } from '@/constants/routes'
 
 const navItems = [
   { to: ROUTES.DASHBOARD, icon: LayoutDashboard, label: 'Home' },
   { to: ROUTES.SUBJECTS, icon: BookOpen, label: 'Subjects' },
+  { to: ROUTES.TIMER, icon: Timer, label: 'Timer' },
   { to: ROUTES.NOTES, icon: FileText, label: 'Notes' },
   { to: ROUTES.BOOKMARKS, icon: Bookmark, label: 'Marks' },
-  { to: ROUTES.SETTINGS, icon: Settings, label: 'Settings' },
 ]
 
 export default function BottomNav() {

@@ -27,10 +27,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthChange(async (firebaseUser) => {
       setIsLoading(true)
       if (firebaseUser) {
+        setUser(firebaseUser)
         try {
           const uDoc = await getOrCreateUserDocument(firebaseUser)
           setUserDoc(uDoc)
-          setUser(firebaseUser)
           const progress = await getAllProgress(firebaseUser.uid)
           setProgressMap(progress)
         } catch (err) {
