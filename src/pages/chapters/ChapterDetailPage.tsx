@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   Plus, Pencil, Trash2, ChevronLeft, Play,
   CheckCircle2, Star, Loader2, AlertCircle, CheckCircle,
   Sparkles, Clock, Paperclip, ExternalLink, GripVertical, FileText,
-  Code2, Eye, ClipboardCopy, Check, BookOpen,
+  Code2, Eye, ClipboardCopy, Check, BookOpen, GraduationCap, ChevronDown,
 } from 'lucide-react'
 import {
   getSubject,
@@ -14,6 +14,7 @@ import {
   updateLecture,
   deleteLecture,
   toggleImportant,
+  toggleEngineeringAdmission,
   updateChapterResources,
 } from '@/services/curriculum.service'
 import { fetchYouTubeMetadata } from '@/services/youtube.service'
@@ -23,6 +24,7 @@ import ResourcesSection from '@/pages/chapters/ResourcesSection'
 import { useAuth } from '@/contexts/AuthContext'
 import { buildRoute, ROUTES } from '@/constants/routes'
 import { getThumbnailUrl } from '@/utils/youtube.utils'
+import DocumentPreviewModal from '@/components/ui/DocumentPreviewModal'
 import { SkeletonList } from '@/components/ui/Skeleton'
 import EmptyState from '@/components/ui/EmptyState'
 import Button from '@/components/ui/Button'
@@ -321,8 +323,36 @@ export default function ChapterDetailPage() {
   // ── Lecture Note HTML state ────────────────────────────────────────
   const [lectureNoteHtml, setLectureNoteHtml] = useState('')
   const [noteHtmlView, setNoteHtmlView] = useState<'code' | 'preview'>('code')
+  const [noteHtmlExpanded, setNoteHtmlExpanded] = useState(false)
+
+  // ── In-app slide preview ──────────────────────────────────────
+  const [previewSlide, setPreviewSlide] = useState<{ url: string; title: string } | null>(null)
+
+  // ── Engineering admission state ────────────────────────────────────
+  const [isEngineeringAdmission, setIsEngineeringAdmission] = useState(false)
+
+  // Keyboard shortcut ref for modal
+  const modalKeyRef = useRef<((e: KeyboardEvent) => void) | null>(null)
 
   const { isLectureCompleted, getLectureProgress } = useProgressStats()
+
+  // \u2500\u2500 Keyboard shortcuts for the modal \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  useEffect(() => {
+    if (!showForm) return
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'TEXTAREA') return  // don't intercept in textareas
+      // Ctrl+S / Cmd+S = Save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSubmit()
+        return
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showForm])
 
   const reload = useCallback(async () => {
     if (!user || !subjectId || !chapterId) return
@@ -353,6 +383,8 @@ export default function ChapterDetailPage() {
     setAttachments([])
     setLectureNoteHtml('')
     setNoteHtmlView('code')
+    setNoteHtmlExpanded(false)
+    setIsEngineeringAdmission(false)
   }
 
   const openAdd = () => {
@@ -368,6 +400,8 @@ export default function ChapterDetailPage() {
     setLectureNoteHtml(l.noteHtml || '')
     setTimestamps(l.timestamps ?? [])
     setAttachments(l.attachments ?? [])
+    setIsEngineeringAdmission(l.isEngineeringAdmission ?? false)
+    setNoteHtmlExpanded(!!l.noteHtml)  // expand if already has content
     setShowTimestampRaw(false)  // show editable list when editing existing lecture
     setNoteHtmlView('code')
     setShowForm(true)
@@ -434,6 +468,7 @@ export default function ChapterDetailPage() {
         noteHtml: sanitizedNote || undefined,
         timestamps: timestamps.length > 0 ? timestamps : [],
         attachments: validAttachments.length > 0 ? validAttachments : [],
+        isEngineeringAdmission: isEngineeringAdmission || undefined,
       })
     } else {
       if (!preview) return
@@ -456,6 +491,7 @@ export default function ChapterDetailPage() {
           ...(sanitizedNote ? { noteHtml: sanitizedNote } : {}),
           ...(timestamps.length > 0 ? { timestamps } : {}),
           ...(validAttachments.length > 0 ? { attachments: validAttachments } : {}),
+          ...(isEngineeringAdmission ? { isEngineeringAdmission: true } : {}),
         },
         lectures.length
       )
@@ -480,6 +516,12 @@ export default function ChapterDetailPage() {
     reload()
   }
 
+  const handleToggleEngineering = async (l: Lecture) => {
+    if (!user) return
+    await toggleEngineeringAdmission(user.uid, l.id, l.isEngineeringAdmission ?? false)
+    reload()
+  }
+
   const handleResourcesChange = async (updated: ChapterResource[]) => {
     if (!user || !chapter) return
     // Optimistic update
@@ -489,6 +531,10 @@ export default function ChapterDetailPage() {
 
   if (isLoading) return <SkeletonList count={5} />
   if (!chapter || !subject) return <div className="text-[#64748B]">Chapter not found.</div>
+
+  // Split lectures into engineering-first
+  const engineeringLectures = lectures.filter(l => l.isEngineeringAdmission)
+  const regularLectures = lectures.filter(l => !l.isEngineeringAdmission)
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -507,7 +553,7 @@ export default function ChapterDetailPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-[#F8FAFC]">{chapter.name}</h1>
-          <p className="text-sm text-[#64748B] mt-0.5">{lectures.length} lectures</p>
+          <p className="text-sm text-[#64748B] mt-0.5">{lectures.length} lectures{engineeringLectures.length > 0 ? ` · ${engineeringLectures.length} engineering` : ''}</p>
         </div>
         <Button leftIcon={<Plus size={16} />} onClick={openAdd}>Add Lecture</Button>
       </div>
@@ -533,94 +579,206 @@ export default function ChapterDetailPage() {
         />
 
       ) : (
-        <div className="space-y-2">
-          {lectures.map((l, idx) => {
-            const completed = isLectureCompleted(l.id)
-            const progress = getLectureProgress(l.id)
-            const hasAtt = (l.attachments?.length ?? 0) > 0
-            const hasTs = (l.timestamps?.length ?? 0) > 0
-            return (
-              <div
-                key={l.id}
-                className="group flex items-center gap-3 bg-[#111820] border border-[#1E2A36] rounded-xl hover:border-[#6366F1]/40 transition-all overflow-hidden"
-              >
-                {/* Clickable area: number + thumbnail + info → navigate to watch */}
-                <Link
-                  to={buildRoute(ROUTES.WATCH, { lectureId: l.id })}
-                  className="flex items-center gap-3 flex-1 min-w-0 p-3 pr-1"
-                >
-                  {/* Number + completion */}
-                  <div className="w-8 shrink-0 flex flex-col items-center gap-1">
-                    <span className="text-xs font-mono text-[#475569]">{String(idx + 1).padStart(2, '0')}</span>
-                    {completed ? (
-                      <CheckCircle2 size={14} className="text-[#22C55E]" />
-                    ) : progress > 0 ? (
-                      <div className="w-3 h-3 rounded-full border-2 border-[#6366F1]" />
-                    ) : (
-                      <div className="w-3 h-3 rounded-full border-2 border-[#475569]" />
-                    )}
-                  </div>
+        <div className="space-y-4">
 
-                  {/* Thumbnail */}
-                  <img
-                    src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
-                    alt=""
-                    className="w-20 h-12 rounded-lg object-cover shrink-0 bg-[#17202A]"
-                    loading="lazy"
-                  />
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium text-[#F8FAFC] truncate">{l.title}</p>
-                      {l.isImportant && <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />}
-                      {hasAtt && <Paperclip size={12} className="text-[#64748B] shrink-0" aria-label="Has attachments" />}
-                      {hasTs && <Clock size={12} className="text-[#64748B] shrink-0" aria-label="Has timestamps" />}
-                      {l.noteHtml && <BookOpen size={12} className="text-[#38BDF8] shrink-0" aria-label="Has interactive note" />}
-                    </div>
-                    <p className="text-xs text-[#64748B] mt-0.5">{l.channelName} · {l.durationFormatted}</p>
-                  </div>
-                </Link>
-
-                {/* Actions — separate from click area */}
-                <div className="flex items-center gap-1 pr-3 shrink-0">
-                  {/* Document / Slide Button */}
-                  {l.slideUrl && (
-                    <a
-                      href={l.slideUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg text-[#818CF8] hover:text-[#A5B4FC] hover:bg-[#6366F1]/15 transition-colors"
-                      title="Open Lecture Slide / PDF"
-                      aria-label="Open Lecture Slide"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <FileText size={14} />
-                    </a>
-                  )}
-
-                  <button
-                    onClick={() => handleToggleImportant(l)}
-                    className={`p-1.5 rounded-lg cursor-pointer transition-colors opacity-0 group-hover:opacity-100 ${
-                      l.isImportant ? 'text-[#F59E0B]' : 'text-[#64748B] hover:text-[#F59E0B]'
-                    }`}
-                    title="Toggle important"
-                    aria-label="Toggle important"
-                  >
-                    <Star size={13} />
-                  </button>
-                  <button
-                    onClick={() => openEdit(l)}
-                    className="p-1.5 rounded-lg text-[#64748B] hover:text-[#818CF8] hover:bg-[#6366F1]/10 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
-                    title="Edit"
-                    aria-label="Edit lecture"
-                  >
-                    <Pencil size={13} />
-                  </button>
+          {/* ── Engineering Admission priority section ── */}
+          {engineeringLectures.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-1">
+                <div className="flex items-center gap-1.5 bg-gradient-to-r from-[#F59E0B]/20 to-[#FBBF24]/10 border border-[#F59E0B]/30 px-3 py-1.5 rounded-lg">
+                  <GraduationCap size={14} className="text-[#F59E0B]" />
+                  <span className="text-xs font-semibold text-[#F59E0B] tracking-wide">ENGINEERING ADMISSION</span>
                 </div>
+                <div className="flex-1 h-px bg-gradient-to-r from-[#F59E0B]/30 to-transparent" />
               </div>
-            )
-          })}
+              <div className="space-y-2 pl-0">
+                {engineeringLectures.map((l, idx) => {
+                  const completed = isLectureCompleted(l.id)
+                  const progress = getLectureProgress(l.id)
+                  const hasAtt = (l.attachments?.length ?? 0) > 0
+                  const hasTs = (l.timestamps?.length ?? 0) > 0
+                  return (
+                    <div
+                      key={l.id}
+                      className="group flex items-center gap-3 bg-gradient-to-r from-[#F59E0B]/8 to-[#111820] border border-[#F59E0B]/25 rounded-xl hover:border-[#F59E0B]/50 transition-all overflow-hidden"
+                    >
+                      <Link
+                        to={buildRoute(ROUTES.WATCH, { lectureId: l.id })}
+                        className="flex items-center gap-3 flex-1 min-w-0 p-3 pr-1"
+                      >
+                        <div className="w-8 shrink-0 flex flex-col items-center gap-1">
+                          <span className="text-xs font-mono text-[#F59E0B]/60">{String(idx + 1).padStart(2, '0')}</span>
+                          {completed ? (
+                            <CheckCircle2 size={14} className="text-[#22C55E]" />
+                          ) : progress > 0 ? (
+                            <div className="w-3 h-3 rounded-full border-2 border-[#F59E0B]" />
+                          ) : (
+                            <GraduationCap size={13} className="text-[#F59E0B]/60" />
+                          )}
+                        </div>
+                        <img
+                          src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
+                          alt=""
+                          className="w-20 h-12 rounded-lg object-cover shrink-0 bg-[#17202A] ring-1 ring-[#F59E0B]/20"
+                          loading="lazy"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-[#F8FAFC] truncate">{l.title}</p>
+                            {l.isImportant && <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />}
+                            {hasAtt && <Paperclip size={12} className="text-[#64748B] shrink-0" />}
+                            {hasTs && <Clock size={12} className="text-[#64748B] shrink-0" />}
+                            {l.noteHtml && <BookOpen size={12} className="text-[#38BDF8] shrink-0" />}
+                          </div>
+                          <p className="text-xs text-[#64748B] mt-0.5">{l.channelName} · {l.durationFormatted}</p>
+                        </div>
+                      </Link>
+                      <div className="flex items-center gap-1 pr-3 shrink-0">
+                        {l.slideUrl && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPreviewSlide({ url: l.slideUrl!, title: l.title }) }}
+                            className="p-1.5 rounded-lg text-[#818CF8] hover:text-[#A5B4FC] hover:bg-[#6366F1]/15 transition-colors cursor-pointer"
+                            title="Open Lecture Slide (in-app)"
+                          >
+                            <FileText size={14} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleToggleEngineering(l)}
+                          className="p-1.5 rounded-lg cursor-pointer transition-colors text-[#F59E0B] hover:bg-[#F59E0B]/10 opacity-0 group-hover:opacity-100"
+                          title="Remove Engineering mark"
+                        >
+                          <GraduationCap size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleToggleImportant(l)}
+                          className={`p-1.5 rounded-lg cursor-pointer transition-colors opacity-0 group-hover:opacity-100 ${
+                            l.isImportant ? 'text-[#F59E0B]' : 'text-[#64748B] hover:text-[#F59E0B]'
+                          }`}
+                          title="Toggle important"
+                        >
+                          <Star size={13} />
+                        </button>
+                        <button
+                          onClick={() => openEdit(l)}
+                          className="p-1.5 rounded-lg text-[#64748B] hover:text-[#818CF8] hover:bg-[#6366F1]/10 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
+                          title="Edit"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Divider before regular lectures */}
+              {regularLectures.length > 0 && (
+                <div className="flex items-center gap-2 px-1 pt-1">
+                  <div className="flex-1 h-px bg-[#1E2A36]" />
+                  <span className="text-[10px] text-[#475569] font-medium tracking-wide">ALL LECTURES</span>
+                  <div className="flex-1 h-px bg-[#1E2A36]" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Regular lectures ── */}
+          <div className="space-y-2">
+            {regularLectures.map((l, idx) => {
+              const completed = isLectureCompleted(l.id)
+              const progress = getLectureProgress(l.id)
+              const hasAtt = (l.attachments?.length ?? 0) > 0
+              const hasTs = (l.timestamps?.length ?? 0) > 0
+              return (
+                <div
+                  key={l.id}
+                  className="group flex items-center gap-3 bg-[#111820] border border-[#1E2A36] rounded-xl hover:border-[#6366F1]/40 transition-all overflow-hidden"
+                >
+                  {/* Clickable area: number + thumbnail + info → navigate to watch */}
+                  <Link
+                    to={buildRoute(ROUTES.WATCH, { lectureId: l.id })}
+                    className="flex items-center gap-3 flex-1 min-w-0 p-3 pr-1"
+                  >
+                    {/* Number + completion */}
+                    <div className="w-8 shrink-0 flex flex-col items-center gap-1">
+                      <span className="text-xs font-mono text-[#475569]">{String(idx + 1).padStart(2, '0')}</span>
+                      {completed ? (
+                        <CheckCircle2 size={14} className="text-[#22C55E]" />
+                      ) : progress > 0 ? (
+                        <div className="w-3 h-3 rounded-full border-2 border-[#6366F1]" />
+                      ) : (
+                        <div className="w-3 h-3 rounded-full border-2 border-[#475569]" />
+                      )}
+                    </div>
+
+                    {/* Thumbnail */}
+                    <img
+                      src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
+                      alt=""
+                      className="w-20 h-12 rounded-lg object-cover shrink-0 bg-[#17202A]"
+                      loading="lazy"
+                    />
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-[#F8FAFC] truncate">{l.title}</p>
+                        {l.isImportant && <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />}
+                        {hasAtt && <Paperclip size={12} className="text-[#64748B] shrink-0" aria-label="Has attachments" />}
+                        {hasTs && <Clock size={12} className="text-[#64748B] shrink-0" aria-label="Has timestamps" />}
+                        {l.noteHtml && <BookOpen size={12} className="text-[#38BDF8] shrink-0" aria-label="Has interactive note" />}
+                      </div>
+                      <p className="text-xs text-[#64748B] mt-0.5">{l.channelName} · {l.durationFormatted}</p>
+                    </div>
+                  </Link>
+
+                  {/* Actions — separate from click area */}
+                  <div className="flex items-center gap-1 pr-3 shrink-0">
+                    {/* Document / Slide Button */}
+                    {l.slideUrl && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPreviewSlide({ url: l.slideUrl!, title: l.title }) }}
+                        className="p-1.5 rounded-lg text-[#818CF8] hover:text-[#A5B4FC] hover:bg-[#6366F1]/15 transition-colors cursor-pointer"
+                        title="Open Lecture Slide (in-app)"
+                        aria-label="Open Lecture Slide"
+                      >
+                        <FileText size={14} />
+                      </button>
+                    )}
+
+                    {/* Engineering Admission toggle */}
+                    <button
+                      onClick={() => handleToggleEngineering(l)}
+                      className="p-1.5 rounded-lg cursor-pointer transition-colors text-[#64748B] hover:text-[#F59E0B] hover:bg-[#F59E0B]/10 opacity-0 group-hover:opacity-100"
+                      title="Mark as Engineering Admission class"
+                    >
+                      <GraduationCap size={13} />
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleImportant(l)}
+                      className={`p-1.5 rounded-lg cursor-pointer transition-colors opacity-0 group-hover:opacity-100 ${
+                        l.isImportant ? 'text-[#F59E0B]' : 'text-[#64748B] hover:text-[#F59E0B]'
+                      }`}
+                      title="Toggle important"
+                      aria-label="Toggle important"
+                    >
+                      <Star size={13} />
+                    </button>
+                    <button
+                      onClick={() => openEdit(l)}
+                      className="p-1.5 rounded-lg text-[#64748B] hover:text-[#818CF8] hover:bg-[#6366F1]/10 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
+                      title="Edit"
+                      aria-label="Edit lecture"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -628,10 +786,40 @@ export default function ChapterDetailPage() {
       <Modal
         isOpen={showForm}
         onClose={() => setShowForm(false)}
-        title={editingLecture ? 'Edit Lecture' : 'Add YouTube Lecture'}
+        title={editingLecture ? 'Edit Lecture' : 'Add Lecture'}
         size="lg"
       >
         <div className="space-y-5 max-h-[75vh] overflow-y-auto pr-1">
+
+          {/* ── Save button at TOP + shortcuts hint ── */}
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#1E2A36]">
+            <div className="flex items-center gap-2">
+              {editingLecture && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteTarget(editingLecture)
+                    setShowForm(false)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[#EF4444] hover:bg-[#EF4444]/10 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              )}
+              <span className="text-[10px] text-[#475569] hidden sm:block">Ctrl+S to save{!editingLecture ? ' · Ctrl+Enter to import' : ''}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button
+                size="sm"
+                isLoading={isSubmitting}
+                onClick={handleSubmit}
+                disabled={!editingLecture && !preview}
+              >
+                {editingLecture ? 'Save Changes' : 'Add Lecture'}
+              </Button>
+            </div>
+          </div>
 
           {/* ── YouTube import (new only) ── */}
           {!editingLecture && (
@@ -643,6 +831,7 @@ export default function ChapterDetailPage() {
                     value={youtubeUrl}
                     onChange={(e) => setYoutubeUrl(e.target.value)}
                     placeholder="https://youtube.com/watch?v=..."
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleFetch() } }}
                   />
                 </div>
                 <div className="flex items-end shrink-0">
@@ -685,11 +874,39 @@ export default function ChapterDetailPage() {
             placeholder="You can edit the auto-fetched title"
           />
 
+          {/* ── Engineering Admission toggle ── */}
+          <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-[#1E2A36] bg-[#0B0F14]">
+            <div className="flex items-center gap-2">
+              <GraduationCap size={14} className={isEngineeringAdmission ? 'text-[#F59E0B]' : 'text-[#475569]'} />
+              <div>
+                <p className="text-xs font-medium text-[#F8FAFC]">Engineering Admission Class</p>
+                <p className="text-[10px] text-[#475569]">Priority section এ উপরে দেখাবে</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsEngineeringAdmission(prev => !prev)}
+              className={`relative w-10 h-5.5 rounded-full transition-colors cursor-pointer shrink-0 ${
+                isEngineeringAdmission ? 'bg-[#F59E0B]' : 'bg-[#1E2A36]'
+              }`}
+              style={{ height: '22px' }}
+              aria-label="Toggle Engineering Admission"
+              role="switch"
+              aria-checked={isEngineeringAdmission}
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                  isEngineeringAdmission ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
           {/* ── Lecture Slide (Google Drive link) ── */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-[#F8FAFC] flex items-center gap-1.5">
-              <FileText size={14} className="text-[#818CF8]" /> Lecture Slide / Notes Link
-              <span className="text-xs text-[#64748B] font-normal">(Google Drive / PDF link)</span>
+              <FileText size={14} className="text-[#818CF8]" /> Lecture Slide Link
+              <span className="text-xs text-[#64748B] font-normal">(Google Drive / PDF)</span>
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -706,98 +923,11 @@ export default function ChapterDetailPage() {
                   rel="noopener noreferrer"
                   className="p-2.5 rounded-lg text-[#818CF8] bg-[#6366F1]/10 hover:bg-[#6366F1]/20 transition-colors shrink-0"
                   title="Test link"
-                  aria-label="Test link"
                 >
                   <ExternalLink size={15} />
                 </a>
               )}
             </div>
-            <p className="text-[10px] text-[#475569]">
-              Google Drive বা লেকচার স্লাইডের লিংক দিন। কার্ডের Play বাটনের পাশে ডকুমেন্ট আইকনে ক্লিক করলে সরাসরি এই লিংক ওপেন হবে।
-            </p>
-          </div>
-
-          {/* ── Lecture Interactive Note (HTML) ── */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <label className="text-sm font-medium text-[#F8FAFC] flex items-center gap-1.5">
-                <BookOpen size={14} className="text-[#38BDF8]" /> Interactive Lecture Note
-                <span className="text-xs text-[#64748B] font-normal">(HTML — দেখাবে video-র নিচে)</span>
-              </label>
-              <LectureNoteCopyButton text={buildLectureNotePrompt(lectureTitle, subject?.name, chapter?.name)} />
-            </div>
-
-            {/* Info bar */}
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-[#0B0F14] border border-[#38BDF8]/20 text-[11px] text-[#94A3B8]">
-              <BookOpen size={13} className="text-[#38BDF8] shrink-0 mt-0.5" />
-              <span>Claude/GPT থেকে HTML লিখিয়ে paste করুন। প্রতিটি lecture-এর নিজস্ব dedicated note। Watch page-এ <strong className="text-[#F8FAFC]">Slide | Note</strong> ট্যাব দিয়ে switch করা যাবে।</span>
-            </div>
-
-            {/* Code / Preview tab bar */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center bg-[#0B0F14] border border-[#1E2A36] rounded-lg p-0.5 gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => setNoteHtmlView('code')}
-                  className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition-all cursor-pointer ${
-                    noteHtmlView === 'code' ? 'bg-[#1E2A36] text-[#F8FAFC]' : 'text-[#64748B] hover:text-[#94A3B8]'
-                  }`}
-                >
-                  <Code2 size={11} /> Code
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNoteHtmlView('preview')}
-                  className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition-all cursor-pointer ${
-                    noteHtmlView === 'preview' ? 'bg-[#1E2A36] text-[#F8FAFC]' : 'text-[#64748B] hover:text-[#94A3B8]'
-                  }`}
-                >
-                  <Eye size={11} /> Live Preview
-                </button>
-              </div>
-              {lectureNoteHtml.trim() && (
-                <span className="text-[10px] text-[#475569] font-mono">
-                  {(new Blob([lectureNoteHtml]).size / 1024).toFixed(1)} KB
-                </span>
-              )}
-            </div>
-
-            {/* Code textarea */}
-            {noteHtmlView === 'code' && (
-              <div className="space-y-1">
-                <textarea
-                  value={lectureNoteHtml}
-                  onChange={(e) => setLectureNoteHtml(stripNoteHtmlFences(e.target.value))}
-                  placeholder={`Claude থেকে HTML paste করুন...\n\n<div class="academic-note">\n  <h2>লেকচারের শিরোনাম</h2>\n  <div class="formula-card">...</div>\n  <div class="concept-box">...</div>\n</div>\n\n💡 \`\`\`html ফেন্স সহ paste করলেও অটোমেটিক strip হয়।`}
-                  className="w-full bg-[#080C12] border border-[#1E2A36] focus:border-[#38BDF8]/40 rounded-xl px-3 py-2.5 text-xs text-[#A5B4FC] placeholder-[#2D3A4A] resize-none focus:outline-none focus:ring-1 focus:ring-[#38BDF8]/30 h-48 font-mono leading-relaxed"
-                  spellCheck={false}
-                />
-                <p className="text-[10px] text-[#334155]">
-                  Markdown fences (```html ... ```) paste করলে অটোমেটিক remove হয়।
-                </p>
-              </div>
-            )}
-
-            {/* Live preview */}
-            {noteHtmlView === 'preview' && (
-              lectureNoteHtml.trim() ? (
-                <div
-                  className="bg-[#080C12] border border-[#1E2A36] rounded-xl p-4 max-h-64 overflow-y-auto"
-                  dangerouslySetInnerHTML={{
-                    __html: sanitizeNoteHtml(
-                      lectureNoteHtml.trim().startsWith('<div class="academic-note"')
-                        ? lectureNoteHtml
-                        : `<div class="academic-note">${lectureNoteHtml}</div>`
-                    )
-                  }}
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-2 h-28 border border-dashed border-[#1E2A36] rounded-xl text-[#334155]">
-                  <Eye size={20} />
-                  <p className="text-xs text-center">Code ট্যাবে HTML paste করুন, এখানে Live Preview দেখুন</p>
-                </div>
-              )
-            )}
           </div>
 
           {/* ── Timestamps section ── */}
@@ -823,12 +953,9 @@ export default function ChapterDetailPage() {
                 <textarea
                   value={rawTimestamps}
                   onChange={(e) => setRawTimestamps(e.target.value)}
-                  placeholder={`Paste timestamps in any format:\n00:00 Introduction\n2:35 Vectors\n05:40 Vector Addition\n10.20 Important Formula\n15 min 30 sec Newton's Laws`}
+                  placeholder={`Paste timestamps in any format:\n00:00 Introduction\n2:35 Vectors\n05:40 Vector Addition\n10.20 Important Formula`}
                   className="w-full bg-[#111820] border border-[#1E2A36] rounded-xl px-3 py-2.5 text-xs text-[#F8FAFC] placeholder-[#475569] resize-none focus:outline-none focus:ring-1 focus:ring-[#6366F1] h-32 font-mono"
                 />
-                <p className="text-[10px] text-[#475569]">
-                  Paste timestamps copied from YouTube descriptions, comments, or your own notes. Any format is accepted.
-                </p>
                 {aiTimestampError && (
                   <div className="flex items-start gap-2 text-xs text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-xl px-3 py-2.5">
                     <AlertCircle size={13} className="shrink-0 mt-0.5" />
@@ -929,37 +1056,90 @@ export default function ChapterDetailPage() {
 
             {attachments.length === 0 && (
               <p className="text-[10px] text-[#475569]">
-                Add additional supporting files (e.g. formula sheets, homework PDFs).
+                Add supporting files (formula sheets, homework PDFs, etc.).
               </p>
             )}
           </div>
 
-          {/* ── Footer ── */}
-          <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#1E2A36]">
-            {editingLecture ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteTarget(editingLecture)
-                  setShowForm(false)
-                }}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[#EF4444] hover:bg-[#EF4444]/10 rounded-lg transition-colors cursor-pointer"
-              >
-                <Trash2 size={14} /> Delete Lecture
-              </button>
-            ) : <div />}
+          {/* ── Lecture Interactive Note (HTML) — collapsible, stays at bottom ── */}
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setNoteHtmlExpanded(prev => !prev)}
+              className="w-full flex items-center justify-between gap-2 text-sm font-medium text-[#F8FAFC] hover:text-[#818CF8] transition-colors cursor-pointer group"
+            >
+              <div className="flex items-center gap-1.5">
+                <BookOpen size={14} className="text-[#38BDF8]" />
+                <span>Interactive Note</span>
+                <span className="text-xs text-[#64748B] font-normal">(HTML)</span>
+                {lectureNoteHtml.trim() && (
+                  <span className="text-[10px] font-mono text-[#38BDF8] bg-[#38BDF8]/10 px-1.5 py-0.5 rounded">
+                    {(new Blob([lectureNoteHtml]).size / 1024).toFixed(1)} KB
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <LectureNoteCopyButton text={buildLectureNotePrompt(lectureTitle, subject?.name, chapter?.name)} />
+                <ChevronDown size={14} className={`text-[#475569] transition-transform ${noteHtmlExpanded ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
 
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button
-                isLoading={isSubmitting}
-                onClick={handleSubmit}
-                disabled={!editingLecture && !preview}
-              >
-                {editingLecture ? 'Save Changes' : 'Add Lecture'}
-              </Button>
-            </div>
+            {noteHtmlExpanded && (
+              <div className="space-y-2 animate-fade-in">
+                <div className="flex items-center bg-[#0B0F14] border border-[#1E2A36] rounded-lg p-0.5 gap-0.5 w-fit">
+                  <button
+                    type="button"
+                    onClick={() => setNoteHtmlView('code')}
+                    className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition-all cursor-pointer ${
+                      noteHtmlView === 'code' ? 'bg-[#1E2A36] text-[#F8FAFC]' : 'text-[#64748B] hover:text-[#94A3B8]'
+                    }`}
+                  >
+                    <Code2 size={11} /> Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNoteHtmlView('preview')}
+                    className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition-all cursor-pointer ${
+                      noteHtmlView === 'preview' ? 'bg-[#1E2A36] text-[#F8FAFC]' : 'text-[#64748B] hover:text-[#94A3B8]'
+                    }`}
+                  >
+                    <Eye size={11} /> Preview
+                  </button>
+                </div>
+
+                {noteHtmlView === 'code' && (
+                  <textarea
+                    value={lectureNoteHtml}
+                    onChange={(e) => setLectureNoteHtml(stripNoteHtmlFences(e.target.value))}
+                    placeholder={`Claude থেকে HTML paste করুন...\n\n<div class="academic-note">\n  <h2>লেকচারের শিরোনাম</h2>\n</div>`}
+                    className="w-full bg-[#080C12] border border-[#1E2A36] focus:border-[#38BDF8]/40 rounded-xl px-3 py-2.5 text-xs text-[#A5B4FC] placeholder-[#2D3A4A] resize-none focus:outline-none focus:ring-1 focus:ring-[#38BDF8]/30 h-48 font-mono leading-relaxed"
+                    spellCheck={false}
+                  />
+                )}
+
+                {noteHtmlView === 'preview' && (
+                  lectureNoteHtml.trim() ? (
+                    <div
+                      className="bg-[#080C12] border border-[#1E2A36] rounded-xl p-4 max-h-64 overflow-y-auto"
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeNoteHtml(
+                          lectureNoteHtml.trim().startsWith('<div class="academic-note"')
+                            ? lectureNoteHtml
+                            : `<div class="academic-note">${lectureNoteHtml}</div>`
+                        )
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-2 h-28 border border-dashed border-[#1E2A36] rounded-xl text-[#334155]">
+                      <Eye size={20} />
+                      <p className="text-xs">Code ট্যাবে HTML paste করুন</p>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
           </div>
+
         </div>
       </Modal>
 
@@ -974,6 +1154,16 @@ export default function ChapterDetailPage() {
         isDanger
         isLoading={isSubmitting}
       />
+
+      {/* ── In-app Slide Preview Modal ── */}
+      {previewSlide && (
+        <DocumentPreviewModal
+          url={previewSlide.url}
+          title="Lecture Slide"
+          subtitle={previewSlide.title}
+          onClose={() => setPreviewSlide(null)}
+        />
+      )}
     </div>
   )
 }

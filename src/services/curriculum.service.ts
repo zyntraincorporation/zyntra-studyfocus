@@ -323,7 +323,7 @@ export async function createLecture(
 export async function updateLecture(
   userId: string,
   lectureId: string,
-  data: Partial<Pick<Lecture, 'title' | 'description' | 'isImportant' | 'videoStatus' | 'slideUrl' | 'noteHtml' | 'timestamps' | 'attachments'>>
+  data: Partial<Pick<Lecture, 'title' | 'description' | 'isImportant' | 'isEngineeringAdmission' | 'videoStatus' | 'slideUrl' | 'noteHtml' | 'timestamps' | 'attachments'>>
 ): Promise<void> {
   const cleanedData = cleanUndefined(data)
   await updateDoc(lectureDoc(userId, lectureId), {
@@ -375,6 +375,17 @@ export async function toggleImportant(
 ): Promise<void> {
   await updateDoc(lectureDoc(userId, lectureId), {
     isImportant: !current,
+    updatedAt: serverTimestamp(),
+  })
+}
+
+export async function toggleEngineeringAdmission(
+  userId: string,
+  lectureId: string,
+  current: boolean
+): Promise<void> {
+  await updateDoc(lectureDoc(userId, lectureId), {
+    isEngineeringAdmission: !current,
     updatedAt: serverTimestamp(),
   })
 }

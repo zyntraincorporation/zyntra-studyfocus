@@ -88,6 +88,7 @@ export interface Lecture {
   description: string
   order: number
   isImportant: boolean
+  isEngineeringAdmission?: boolean  // true = Engineering Admission class (shown in priority section)
   isActive: boolean
   videoStatus: VideoStatus
   slideUrl?: string
@@ -131,4 +132,5 @@ export type LectureInput = {
   noteHtml?: string
   timestamps?: LectureTimestamp[]
   attachments?: LectureAttachment[]
+  isEngineeringAdmission?: boolean
 }

@@ -1015,9 +1015,12 @@ export default function ResourcesSection({
   return (
     <>
       <div className="bg-[#0D1520] border border-[#1E2A36] rounded-2xl overflow-hidden">
-        <button
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setIsExpanded((v) => !v)}
-          className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#111820]/60 transition-colors cursor-pointer"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded((v) => !v) } }}
+          className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#111820]/60 transition-colors cursor-pointer select-none"
         >
           <div className="flex items-center gap-2.5">
             <BookOpen size={16} className="text-[#818CF8]" />
@@ -1031,6 +1034,7 @@ export default function ResourcesSection({
           <div className="flex items-center gap-2">
             {isAdmin && isExpanded && (
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); setEditingResource(null); setShowForm(true) }}
                 className="flex items-center gap-1.5 text-xs text-[#6366F1] hover:text-[#818CF8] bg-[#6366F1]/10 hover:bg-[#6366F1]/20 px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-medium"
               >
@@ -1039,7 +1043,7 @@ export default function ResourcesSection({
             )}
             {isExpanded ? <ChevronUp size={15} className="text-[#475569]" /> : <ChevronDown size={15} className="text-[#475569]" />}
           </div>
-        </button>
+        </div>
 
         {isExpanded && (
           <div className="border-t border-[#1E2A36] px-5 py-4">

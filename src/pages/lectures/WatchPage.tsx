@@ -18,13 +18,14 @@ import {
   X, Star, Zap, Play, Pause, Volume1, Volume2, VolumeX, Maximize, Minimize,
   Gauge, Settings2, SkipBack, SkipForward, Clock, Paperclip,
   ExternalLink, List, Subtitles, Presentation, BookOpen, Maximize2, Minimize2,
+  FolderOpen,
 } from 'lucide-react'
-import { getLecture } from '@/services/curriculum.service'
+import { getLecture, getChapter } from '@/services/curriculum.service'
 import { getProgress, saveProgress, markCompleted } from '@/services/progress.service'
 import { createSession } from '@/services/sessions.service'
 import { getNotes, createNote } from '@/services/notes.service'
 import { getBookmarks, createBookmark } from '@/services/bookmarks.service'
-import type { Lecture } from '@/types/curriculum.types'
+import type { Lecture, ChapterResource } from '@/types/curriculum.types'
 import type { LectureProgress } from '@/types/progress.types'
 import type { Note, NoteCategory } from '@/types/notes.types'
 import type { Bookmark as BookmarkType, BookmarkCategory } from '@/types/bookmarks.types'
@@ -43,6 +44,8 @@ import Modal from '@/components/ui/Modal'
 import BreakReminderModal from '@/components/ui/BreakReminderModal'
 import DOMPurify from 'dompurify'
 import { renderMathInHtml } from '@/utils/mathRenderer'
+import DocumentPreviewModal from '@/components/ui/DocumentPreviewModal'
+import { toSlideEmbedUrl } from '@/utils/embed.utils'
 
 // ── Sanitize lecture note HTML ─────────────────────────────────────────
 function sanitizeWatchNote(html: string): string {
@@ -106,32 +109,7 @@ const NOTE_CATEGORIES: NoteCategory[] = ['important', 'formula', 'exam', 'confus
 const BM_CATEGORIES: BookmarkCategory[] = ['important', 'formula', 'exam_question', 'confusing', 'revision', 'example']
 
 // ── Convert any Google Drive share URL → clean embeddable preview URL ─
-function toSlideEmbedUrl(url: string): string {
-  if (!url) return ''
-  const trimmed = url.trim()
-  if (trimmed.includes('/preview')) return trimmed
-  if (trimmed.includes('docs.google.com/viewer')) return trimmed
-
-  const mFile = trimmed.match(/\/file\/d\/([^/?#]+)/)
-  if (mFile) return `https://drive.google.com/file/d/${mFile[1]}/preview`
-
-  const mId = trimmed.match(/[?&]id=([^&#]+)/)
-  if (mId) return `https://drive.google.com/file/d/${mId[1]}/preview`
-
-  const mDocs = trimmed.match(/docs\.google\.com\/(presentation|document|spreadsheets)\/d\/([^/?#]+)/)
-  if (mDocs) return `https://docs.google.com/${mDocs[1]}/d/${mDocs[2]}/preview`
-
-  if (trimmed.includes('drive.google.com')) {
-    const rawIdMatch = trimmed.match(/[-\w]{25,}/)
-    if (rawIdMatch) return `https://drive.google.com/file/d/${rawIdMatch[0]}/preview`
-  }
-
-  if (/\.pdf($|[?#])/i.test(trimmed)) {
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(trimmed)}&embedded=true`
-  }
-
-  return trimmed
-}
+// Implemented in @/utils/embed.utils
 
 // ── Dropdown popup ────────────────────────────────────────────────────
 function ControlDropdown({
@@ -248,6 +226,14 @@ export default function WatchPage() {
   const [noteModalFullWidth, setNoteModalFullWidth] = useState(false)
   const [noteZoom, setNoteZoom] = useState(100)
 
+  // ── Chapter Resources ────────────────────────────────────────
+  const [chapterResources, setChapterResources] = useState<ChapterResource[]>([])
+  const [resourcePanelOpen, setResourcePanelOpen] = useState(false)
+  const [activeResource, setActiveResource] = useState<ChapterResource | null>(null)
+
+  // \u2500\u2500 Attachment in-app viewer \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  const [activeAttachment, setActiveAttachment] = useState<{ url: string; title: string } | null>(null)
+
   // ── Side panel ────────────────────────────────────────────────────
   const [panelOpen, setPanelOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<SidePanelTab>('notes')
@@ -357,6 +343,12 @@ export default function WatchPage() {
       setBookmarks(bmList)
       if (prog && prog.currentPosition > RESUME_THRESHOLD && !prog.completed) {
         setShowResumeDialog(true)
+      }
+      // Load chapter resources for in-app access during playback
+      if (lec?.chapterId) {
+        getChapter(user.uid, lec.chapterId).then(chap => {
+          setChapterResources(chap?.resources ?? [])
+        }).catch(() => {})
       }
     }).finally(() => setIsLoading(false))
   }, [lectureId, user])
@@ -1500,6 +1492,21 @@ export default function WatchPage() {
           </button>
         )}
 
+        {/* Chapter Resources Button */}
+        {chapterResources.length > 0 && (
+          <button
+            onClick={() => setResourcePanelOpen(prev => !prev)}
+            className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs ${
+              resourcePanelOpen ? 'text-[#34D399] bg-[#34D399]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+            title={`Chapter Resources (${chapterResources.length})`}
+            aria-label="Chapter Resources"
+          >
+            <FolderOpen size={16} />
+            <span className="hidden xl:block ml-1">Resources</span>
+          </button>
+        )}
+
         {/* Attachments */}
         {hasAttachments && (
           <div className={`relative ${!isFullscreen ? 'max-sm:hidden' : ''}`} data-dropdown>
@@ -1537,18 +1544,15 @@ export default function WatchPage() {
                   </button>
                 )}
                 {lecture.attachments?.map((att) => (
-                  <a
+                  <button
                     key={att.id}
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setAttachOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC] transition-colors"
+                    onClick={() => { setAttachOpen(false); setActiveAttachment({ url: att.url, title: att.title }) }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC] transition-colors cursor-pointer text-left"
                   >
                     <Paperclip size={12} className="shrink-0" />
                     <span className="truncate max-w-[180px]">{att.title}</span>
-                    <ExternalLink size={11} className="shrink-0 opacity-50 ml-auto" />
-                  </a>
+                    <FileText size={11} className="shrink-0 opacity-50 ml-auto" />
+                  </button>
                 ))}
               </div>
             </ControlDropdown>
@@ -2049,40 +2053,12 @@ export default function WatchPage() {
 
       {/* ── Lecture Slide Modal (full-screen in-app viewer) ── */}
       {slideModalOpen && lecture?.slideUrl && (
-        <div
-          className="fixed inset-0 z-[200] flex flex-col bg-black/90 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Lecture Slide Viewer"
-        >
-          {/* Modal Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-[#0B0F14] border-b border-[#1E2A36] shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <FileText size={16} className="text-[#818CF8] shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[#F8FAFC] truncate">Lecture Slide</p>
-                <p className="text-[10px] text-[#64748B] truncate">{lecture.title}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setSlideModalOpen(false)}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-[#64748B] hover:text-[#F8FAFC] hover:bg-[#111820] transition-colors cursor-pointer shrink-0"
-              aria-label="Close slide viewer"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {/* iframe fills remaining space cleanly, bottom bar intact */}
-          <div className="flex-1 w-full relative overflow-hidden bg-[#0B0F14]" style={{ minHeight: 0 }}>
-            <iframe
-              src={toSlideEmbedUrl(lecture.slideUrl)}
-              allow="autoplay"
-              title="Lecture Slide"
-              className="w-full h-full border-none bg-[#0B0F14] block"
-            />
-          </div>
-        </div>
+        <DocumentPreviewModal
+          url={lecture.slideUrl}
+          title="Lecture Slide"
+          subtitle={lecture.title}
+          onClose={() => setSlideModalOpen(false)}
+        />
       )}
 
       {/* ── Lecture Interactive Note Fullscreen Modal (Video keeps playing!) ── */}
@@ -2184,6 +2160,154 @@ export default function WatchPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* \u2500\u2500 Chapter Resources In-App Viewer \u2500\u2500 */}
+      {resourcePanelOpen && chapterResources.length > 0 && (
+        <div
+          className="fixed inset-0 z-[200] flex flex-col bg-black/90 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Chapter Resources"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-[#0B0F14] border-b border-[#1E2A36] shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <FolderOpen size={16} className="text-[#34D399] shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[#F8FAFC] truncate">Chapter Resources</p>
+                <p className="text-[10px] text-[#64748B] truncate">{lecture?.chapterName} &middot; {chapterResources.length} items</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeResource && (
+                <button
+                  onClick={() => setActiveResource(null)}
+                  className="flex items-center gap-1 text-xs text-[#64748B] hover:text-[#F8FAFC] px-2.5 py-1.5 rounded-lg hover:bg-[#111820] transition-colors cursor-pointer"
+                >
+                  <ChevronLeft size={14} /> Back
+                </button>
+              )}
+              <button
+                onClick={() => { setResourcePanelOpen(false); setActiveResource(null) }}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-[#64748B] hover:text-[#F8FAFC] hover:bg-[#111820] transition-colors cursor-pointer shrink-0"
+                aria-label="Close resources"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Body: left list + right viewer */}
+          <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+            {/* Resource list */}
+            <div className={`${activeResource ? 'hidden sm:flex' : 'flex'} flex-col w-full sm:w-72 border-r border-[#1E2A36] bg-[#0B0F14] shrink-0 overflow-y-auto`}>
+              <div className="p-3 space-y-1.5">
+                {chapterResources.map((res) => {
+                  const isNote = res.type === 'note'
+                  const icon = isNote
+                    ? <BookOpen size={14} className="text-[#34D399] shrink-0" />
+                    : res.type === 'pdf'
+                      ? <FileText size={14} className="text-[#EF4444] shrink-0" />
+                      : <ExternalLink size={14} className="text-[#38BDF8] shrink-0" />
+                  const isActive = activeResource?.id === res.id
+                  return (
+                    <button
+                      key={res.id}
+                      onClick={() => setActiveResource(res)}
+                      className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#34D399]/10 border border-[#34D399]/30'
+                          : 'hover:bg-[#111820] border border-transparent'
+                      }`}
+                    >
+                      <div className="mt-0.5">{icon}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-[#F8FAFC] truncate">{res.title}</p>
+                        <p className="text-[10px] text-[#64748B] capitalize mt-0.5">{res.type}</p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Viewer pane */}
+            <div className="flex-1 bg-[#080C12] overflow-hidden relative flex flex-col" style={{ minHeight: 0 }}>
+              {!activeResource ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-[#475569]">
+                  <FolderOpen size={36} className="opacity-30" />
+                  <p className="text-sm">\u098f\u0995\u099f\u09bf resource \u09b8\u09bf\u09b2\u09c7\u0995\u09cd\u099f \u0995\u09b0\u09c1\u09a8</p>
+                </div>
+              ) : activeResource.type === 'note' ? (
+                // Note: render inline
+                <div className="flex-1 overflow-y-auto p-6" style={{ minHeight: 0 }}>
+                  {activeResource.htmlContent ? (
+                    <div
+                      className="academic-note max-w-4xl mx-auto"
+                      dangerouslySetInnerHTML={{ __html: activeResource.htmlContent }}
+                    />
+                  ) : activeResource.rawContent ? (
+                    <pre className="text-sm text-[#CBD5E1] whitespace-pre-wrap leading-relaxed max-w-4xl mx-auto font-sans">
+                      {activeResource.rawContent}
+                    </pre>
+                  ) : (
+                    <p className="text-[#64748B] text-sm text-center mt-16">No content available.</p>
+                  )}
+                </div>
+              ) : activeResource.url ? (
+                // PDF / Link: embed in iframe
+                <>
+                  <div className="flex items-center justify-end px-3 py-1.5 bg-[#0B0F14] border-b border-[#1E2A36] shrink-0">
+                    <a
+                      href={activeResource.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-xs text-[#64748B] hover:text-[#F8FAFC] transition-colors"
+                    >
+                      <ExternalLink size={12} /> Open in new tab
+                    </a>
+                  </div>
+                  <div className="flex-1 relative" style={{ minHeight: 0 }}>
+                    <iframe
+                      key={activeResource.id}
+                      src={(() => {
+                        const url = activeResource.url!
+                        const t = url.trim()
+                        if (t.includes('/preview')) return t
+                        const df = t.match(/drive\.google\.com\/file\/d\/([^/?#]+)/)
+                        if (df) return `https://drive.google.com/file/d/${df[1]}/preview`
+                        const dm = t.match(/docs\.google\.com\/(document|spreadsheets|presentation)\/d\/([^/?#]+)/)
+                        if (dm) return `https://docs.google.com/${dm[1]}/d/${dm[2]}/preview`
+                        if (/\.pdf($|[?#])/i.test(t)) return `https://docs.google.com/viewer?url=${encodeURIComponent(t)}&embedded=true`
+                        return t
+                      })()}
+                      title={activeResource.title}
+                      allow="autoplay"
+                      loading="lazy"
+                      className="w-full h-full border-none block bg-[#080C12] absolute inset-0"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full text-[#64748B] text-sm">
+                  No preview available.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* \u2500\u2500 Attachment In-App Viewer Modal \u2500\u2500 */}
+      {activeAttachment && (
+        <DocumentPreviewModal
+          url={activeAttachment.url}
+          title={activeAttachment.title}
+          subtitle="Attachment"
+          icon={<Paperclip size={16} />}
+          onClose={() => setActiveAttachment(null)}
+        />
       )}
     </div>
   )
