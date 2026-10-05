@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const { userDoc, refreshUserDoc } = useAuth()
   const [displayName, setDisplayName] = useState(userDoc?.displayName || 'Saiful')
   const [dailyGoal, setDailyGoal] = useState(userDoc?.dailyGoalMinutes ?? 360)
+  const [hscDate, setHscDate] = useState(userDoc?.hscDate ?? '2026-04-02')
   const [speed, setSpeed] = useState(userDoc?.preferredSpeed ?? 1)
   const [breakReminder, setBreakReminder] = useState(userDoc?.breakReminderMinutes ?? 50)
   const [seekInterval, setSeekInterval] = useState<5 | 10>(
@@ -126,6 +127,7 @@ export default function SettingsPage() {
     await updateUserDocument(userDoc.uid, {
       displayName: displayName.trim() || 'Saiful',
       dailyGoalMinutes: dailyGoal,
+      hscDate,
       preferredSpeed: speed,
       breakReminderMinutes: breakReminder,
       seekInterval,
@@ -169,6 +171,22 @@ export default function SettingsPage() {
       {/* Study Preferences */}
       <section className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4 space-y-5">
         <h2 className="text-sm font-semibold text-[#94A3B8]">Study Preferences</h2>
+
+        {/* HSC / Target exam date */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-[#F8FAFC]">
+            Exam Date (HSC / Admission target)
+          </label>
+          <p className="text-xs text-[#64748B]">
+            Used to show the "days remaining" countdown on your dashboard.
+          </p>
+          <input
+            type="date"
+            value={hscDate}
+            onChange={(e) => setHscDate(e.target.value)}
+            className="h-10 rounded-lg border border-[#1E2A36] bg-[#17202A] text-[#F8FAFC] text-sm px-3 focus:outline-none focus:ring-2 focus:ring-[#6366F1] focus:border-transparent transition-colors [color-scheme:dark]"
+          />
+        </div>
 
         {/* Daily goal */}
         <div className="space-y-1.5">

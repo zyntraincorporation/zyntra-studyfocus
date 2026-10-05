@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Brain, Play, Pause, RotateCcw, ChevronDown,
   BookOpen, CheckCircle2, Maximize2, Minimize2,
@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { getSubjects } from '@/services/curriculum.service'
 import { createSession } from '@/services/sessions.service'
 import type { Subject } from '@/types/curriculum.types'
+import { BreakQuote } from '@/components/ui/ExitQuoteModal'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const CHUNK_FOCUS_SECS = 45 * 60 // 45 minutes focus
@@ -384,6 +385,9 @@ export default function TimerPage() {
           ))}
         </div>
       )}
+
+      {/* Reality-check quote during break */}
+      {isBreak && <BreakQuote />}
     </div>
   )
 

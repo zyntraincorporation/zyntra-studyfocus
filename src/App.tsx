@@ -14,6 +14,9 @@ const SubjectsPage = lazy(() => import('@/pages/subjects/SubjectsPage'))
 const SubjectDetailPage = lazy(() => import('@/pages/subjects/SubjectDetailPage'))
 const ChapterDetailPage = lazy(() => import('@/pages/chapters/ChapterDetailPage'))
 const WatchPage = lazy(() => import('@/pages/lectures/WatchPage'))
+const StudyMaterialsPage = lazy(() => import('@/pages/study-materials/StudyMaterialsPage'))
+const StudyMaterialsSubjectPage = lazy(() => import('@/pages/study-materials/StudyMaterialsSubjectPage'))
+const StudyMaterialReaderPage = lazy(() => import('@/pages/study-materials/StudyMaterialReaderPage'))
 
 // Personal features
 const NotesPage = lazy(() => import('@/pages/notes/NotesPage'))
@@ -43,6 +46,8 @@ export default function App() {
             <Route path={ROUTES.SUBJECTS} element={<SubjectsPage />} />
             <Route path={ROUTES.SUBJECT} element={<SubjectDetailPage />} />
             <Route path={ROUTES.CHAPTER} element={<ChapterDetailPage />} />
+            <Route path={ROUTES.STUDY_MATERIALS} element={<StudyMaterialsPage />} />
+            <Route path={ROUTES.STUDY_SUBJECT} element={<StudyMaterialsSubjectPage />} />
             <Route path={ROUTES.NOTES} element={<NotesPage />} />
             <Route path={ROUTES.BOOKMARKS} element={<BookmarksPage />} />
             <Route path={ROUTES.ANALYTICS} element={<AnalyticsPage />} />
@@ -52,6 +57,9 @@ export default function App() {
 
           {/* Watch page — full screen, no AppLayout chrome */}
           <Route path={ROUTES.WATCH} element={<WatchPage />} />
+
+          {/* Study material reader — full screen, no AppLayout chrome */}
+          <Route path={ROUTES.STUDY_READER} element={<StudyMaterialReaderPage />} />
         </Route>
 
         {/* 404 */}

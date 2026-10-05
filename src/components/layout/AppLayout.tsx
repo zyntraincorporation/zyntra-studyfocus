@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import BottomNav from './BottomNav'
 import Header from './Header'
+import ExitQuoteModal from '@/components/ui/ExitQuoteModal'
 
 export default function AppLayout() {
   return (
@@ -25,6 +26,9 @@ export default function AppLayout() {
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40">
         <BottomNav />
       </nav>
+
+      {/* Daily exit quote — shows once per session on tab hide/close */}
+      <ExitQuoteModal />
     </div>
   )
 }

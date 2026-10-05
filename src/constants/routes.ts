@@ -12,6 +12,11 @@ export const ROUTES = {
   // Lecture player (clean /watch/:lectureId URL)
   WATCH: '/watch/:lectureId',
 
+  // Study Materials (standalone Drive PDF reader)
+  STUDY_MATERIALS: '/study-materials',
+  STUDY_SUBJECT: '/study-materials/subject/:subjectId',
+  STUDY_READER: '/study-materials/read/:resourceId',
+
   // Personal features
   NOTES: '/notes',
   BOOKMARKS: '/bookmarks',

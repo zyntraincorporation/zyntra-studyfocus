@@ -17,6 +17,7 @@ export interface UserDocument {
   lastStreakDate: string   // 'YYYY-MM-DD' in local timezone
   // Preferences (kept on root doc for fast reads)
   dailyGoalMinutes: number
+  hscDate?: string            // 'YYYY-MM-DD' — configurable exam target date
   preferredSpeed: number
   autoResume: boolean
   theme: Theme

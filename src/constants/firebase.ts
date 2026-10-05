@@ -10,6 +10,9 @@ export const SUB = {
   SETTINGS: 'settings',
   STUDY_PLANS: 'studyPlans',
   TRASH: 'trash',
+  STUDY_MATERIALS: 'studyMaterials',
+  STUDY_MATERIAL_PROGRESS: 'studyMaterialProgress',
+  STUDY_MATERIAL_DAILY: 'studyMaterialDaily',
 } as const
 
 // Top-level collection

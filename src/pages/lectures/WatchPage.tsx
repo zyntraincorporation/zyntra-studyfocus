@@ -41,7 +41,7 @@ import {
 } from '@/constants/firebase'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import BreakReminderModal from '@/components/ui/BreakReminderModal'
+import BreakReminderModal, { playChimeTone } from '@/components/ui/BreakReminderModal'
 import DOMPurify from 'dompurify'
 import { renderMathInHtml } from '@/utils/mathRenderer'
 import DocumentPreviewModal from '@/components/ui/DocumentPreviewModal'
@@ -287,6 +287,19 @@ export default function WatchPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying])
+
+  // Auto-pause video and chime notification when break reminder triggers
+  useEffect(() => {
+    if (breakReminder.reminderDue) {
+      try {
+        playerRef.current?.pauseVideo?.()
+      } catch {
+        /* ignore */
+      }
+      setIsPlaying(false)
+      playChimeTone('alert')
+    }
+  }, [breakReminder.reminderDue])
 
   // ── Update Quality Options ─────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1824,6 +1837,14 @@ export default function WatchPage() {
                   onStartBreak={breakReminder.reset}
                   onSnooze={() => breakReminder.snooze(5)}
                   onDismiss={breakReminder.dismiss}
+                  onResumeVideo={() => {
+                    try {
+                      playerRef.current?.playVideo?.()
+                      setIsPlaying(true)
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
                 />
               </div>
 
