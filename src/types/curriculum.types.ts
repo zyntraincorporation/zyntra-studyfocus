@@ -95,6 +95,11 @@ export interface Lecture {
   noteHtml?: string           // per-lecture interactive HTML note (sanitized)
   timestamps?: LectureTimestamp[]
   attachments?: LectureAttachment[]
+  // ── Scheduled Live Lock (added by Live Learning System) ───────────────
+  // These fields are SET when a schedule is locked and CLEARED when the class ends.
+  // They do NOT affect or replace any other lecture data.
+  lockedScheduleId?: string   // ID of the active ScheduledClass locking this lecture
+  lockedUntil?: Timestamp     // Recorded access blocked until this time (= schedule.endAt)
   createdAt: Timestamp
   updatedAt: Timestamp
 }

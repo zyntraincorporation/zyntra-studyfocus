@@ -18,7 +18,9 @@ import ProgressBar from '@/components/ui/ProgressBar'
 import Button from '@/components/ui/Button'
 import { useProgressStats } from '@/hooks/useProgressStats'
 import TodayTargetSection from '@/components/dashboard/TodayTargetSection'
-
+import UpcomingClassesSection from '@/components/dashboard/UpcomingClassesSection'
+import { getLectureLockStatus } from '@/services/schedule.service'
+import { getReliableTime } from '@/services/serverTime.service'
 const DEFAULT_HSC = '2026-04-02'
 
 function getDaysLeft(hscDate?: string): number {
@@ -89,6 +91,14 @@ export default function DashboardPage() {
     getLecture(user.uid, lastWatched.lectureId).then(setLastWatchedLecture)
   }, [user, lastWatched?.lectureId])
 
+  const isLastWatchedLocked = useMemo(() => {
+    if (!lastWatchedLecture) return false
+    return getLectureLockStatus(
+      { lockedScheduleId: lastWatchedLecture.lockedScheduleId, lockedUntil: lastWatchedLecture.lockedUntil },
+      getReliableTime()
+    ).isLocked
+  }, [lastWatchedLecture])
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -102,6 +112,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+
+      {/* ── Upcoming Live Classes (Live Learning System) ── */}
+      <UpcomingClassesSection />
 
       {/* Quick action if no subjects */}
       {subjects.length === 0 && (
@@ -188,7 +201,7 @@ export default function DashboardPage() {
       )}
 
       {/* Continue learning */}
-      {lastWatched && (
+      {lastWatched && !isLastWatchedLocked && (
         <div className="bg-[#111820] border border-[#1E2A36] rounded-xl p-4">
           <p className="text-[10px] uppercase tracking-widest text-[#64748B] mb-3 font-medium">
             Resume

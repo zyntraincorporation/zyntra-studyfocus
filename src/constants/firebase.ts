@@ -13,6 +13,10 @@ export const SUB = {
   STUDY_MATERIALS: 'studyMaterials',
   STUDY_MATERIAL_PROGRESS: 'studyMaterialProgress',
   STUDY_MATERIAL_DAILY: 'studyMaterialDaily',
+  // ── Live Learning System ───────────────────────────────────────────────
+  SCHEDULED_CLASSES: 'scheduledClasses',   // users/{uid}/scheduledClasses/{scheduleId}
+  ATTENDANCE: 'attendance',                 // .../{scheduleId}/attendance/{sessionId}
+  DAILY_TASKS: 'dailyTasks',               // users/{uid}/dailyTasks/{dateKey}
 } as const
 
 // Top-level collection
@@ -41,6 +45,25 @@ export const DEFAULT_SEEK_INTERVAL = 10
 
 // Maximum attachments per lecture
 export const MAX_ATTACHMENTS = 5
+
+// ── Live Learning System Constants ────────────────────────────────────────
+// How far behind live (seconds) before DELAYED mode is shown to user
+export const LIVE_DELAYED_THRESHOLD_SECONDS = 5
+
+// Maximum allowable drift (seconds) before a controlled re-seek happens in FOLLOWING_LIVE mode
+export const LIVE_DRIFT_TOLERANCE_SECONDS = 3
+
+// How often (ms) the live sync loop checks position (NOT a Firestore call)
+export const LIVE_SYNC_INTERVAL_MS = 2_000
+
+// How often (ms) the server clock is re-synced (on visibility change or periodically)
+export const CLOCK_RESYNC_INTERVAL_MS = 5 * 60 * 1000   // 5 minutes
+
+// Attendance heartbeat interval (ms) — how often attendance state is saved to Firestore
+export const ATTENDANCE_SAVE_INTERVAL_MS = 30_000         // 30 seconds
+
+// ── Waiting Room: how many ms before startAt to show the Waiting Room ──
+export const WAITING_ROOM_THRESHOLD_MS = 30 * 60 * 1000  // 30 minutes before class
 
 // Default user preferences
 export const DEFAULT_PREFS = {

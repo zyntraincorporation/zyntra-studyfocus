@@ -23,6 +23,16 @@ export const ROUTES = {
   ANALYTICS: '/analytics',
   SETTINGS: '/settings',
   TIMER: '/timer',
+
+  // ── Live Learning System Routes ──────────────────────────────────────
+  // Full timetable & schedule management
+  SCHEDULE: '/schedule',
+  // Draft builder — create a new schedule
+  SCHEDULE_CREATE: '/schedule/create',
+  // Completed class history & review
+  SCHEDULE_HISTORY: '/schedule/history',
+  // Dedicated live player (fullscreen, no AppLayout chrome — like WatchPage)
+  LIVE_WATCH: '/live/:scheduleId',
 } as const
 
 // Helper: build a dynamic route by replacing :param tokens

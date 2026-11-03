@@ -8,7 +8,7 @@ import {
   Settings,
   LogOut,
   Timer,
-  Library,
+  CalendarDays,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { ROUTES } from '@/constants/routes'
@@ -16,8 +16,8 @@ import appIcon from '@/assets/icon.jpg'
 
 const NAV_ITEMS = [
   { to: ROUTES.DASHBOARD, icon: LayoutDashboard, label: 'Dashboard' },
+  { to: ROUTES.SCHEDULE, icon: CalendarDays, label: 'Live Schedule' },
   { to: ROUTES.SUBJECTS, icon: BookOpen, label: 'My Subjects' },
-  { to: ROUTES.STUDY_MATERIALS, icon: Library, label: 'Study Materials' },
   { to: ROUTES.NOTES, icon: FileText, label: 'Notes' },
   { to: ROUTES.BOOKMARKS, icon: Bookmark, label: 'Bookmarks' },
   { to: ROUTES.ANALYTICS, icon: BarChart3, label: 'Analytics' },

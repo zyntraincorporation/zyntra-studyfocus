@@ -18,13 +18,15 @@ import {
   X, Star, Zap, Play, Pause, Volume1, Volume2, VolumeX, Maximize, Minimize,
   Gauge, Settings2, SkipBack, SkipForward, Clock, Paperclip,
   ExternalLink, List, Subtitles, Presentation, BookOpen, Maximize2, Minimize2,
-  FolderOpen,
+  FolderOpen, Lock,
 } from 'lucide-react'
 import { getLecture, getChapter } from '@/services/curriculum.service'
 import { getProgress, saveProgress, markCompleted } from '@/services/progress.service'
-import { createSession } from '@/services/sessions.service'
+import { createSession, upsertActiveSession } from '@/services/sessions.service'
 import { getNotes, createNote } from '@/services/notes.service'
 import { getBookmarks, createBookmark } from '@/services/bookmarks.service'
+import { getLectureLockStatus } from '@/services/schedule.service'
+import { initClockSync, getReliableTime } from '@/services/serverTime.service'
 import type { Lecture, ChapterResource } from '@/types/curriculum.types'
 import type { LectureProgress } from '@/types/progress.types'
 import type { Note, NoteCategory } from '@/types/notes.types'
@@ -173,6 +175,10 @@ export default function WatchPage() {
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [isPlayerReady, setIsPlayerReady] = useState(false)
 
+  // ── Lecture Lock Guard (PRD §7.2, §7.3) ──────────────────────────
+  // If the lecture is locked for a live session, block recorded access.
+  const [lockedByScheduleId, setLockedByScheduleId] = useState<string | null>(null)
+
   // ── Resume ────────────────────────────────────────────────────────
   const [savedProgress, setSavedProgress] = useState<LectureProgress | null>(null)
   const [showResumeDialog, setShowResumeDialog] = useState(false)
@@ -259,6 +265,8 @@ export default function WatchPage() {
   const saveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const sessionStartRef = useRef<Date | null>(null)
+  const sessionIdRef = useRef<string | null>(null)
+  const lastSessionSavedElapsedRef = useRef(0)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastClickRef = useRef<{ time: number; xPercent: number } | null>(null)
@@ -342,7 +350,26 @@ export default function WatchPage() {
       getProgress(user.uid, lectureId),
       getNotes(user.uid, lectureId),
       getBookmarks(user.uid, lectureId),
-    ]).then(([lec, prog, noteList, bmList]) => {
+    ]).then(async ([lec, prog, noteList, bmList]) => {
+      // ── Lock guard: check if this lecture is reserved for a live session ──
+      if (lec) {
+        let reliableNow = Date.now()
+        try {
+          await initClockSync()
+          reliableNow = getReliableTime()
+        } catch { /* fallback to Date.now() */ }
+
+        const lockStatus = getLectureLockStatus(
+          { lockedScheduleId: lec.lockedScheduleId ?? null, lockedUntil: lec.lockedUntil ?? null },
+          reliableNow
+        )
+        if (lockStatus.isLocked) {
+          setLockedByScheduleId(lockStatus.scheduleId)
+          setLecture(lec)
+          return // .finally() will call setIsLoading(false)
+        }
+      }
+      // ── Normal load ───────────────────────────────────────────────────────
       setLecture(lec)
       if (lec?.slideUrl) {
         setContentTab('slide')
@@ -368,7 +395,7 @@ export default function WatchPage() {
 
   // ── Init YouTube Player ───────────────────────────────────────────
   useEffect(() => {
-    if (!lecture || !playerDivRef.current) return
+    if (!lecture || lockedByScheduleId || !playerDivRef.current) return
 
     const initPlayer = () => {
       if (!playerDivRef.current) return
@@ -478,7 +505,10 @@ export default function WatchPage() {
     const YTState = window.YT?.PlayerState
     if (s === YTState?.PLAYING) {
       setIsPlaying(true)
-      if (!sessionStartRef.current) sessionStartRef.current = new Date()
+      if (!sessionStartRef.current) {
+        sessionStartRef.current = new Date()
+        sessionIdRef.current = crypto.randomUUID?.() || `rec_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+      }
       clearIdleTimer()
       startPolling()
       startSaving()
@@ -552,6 +582,25 @@ export default function WatchPage() {
     }
     saveProgress(user.uid, lectureId, data)
     updateProgressMap(lectureId, data)
+
+    // Progressively sync active study session every 30s so study time is never lost if computer shuts off!
+    // Free-tier optimized: saves only every 30s to stay way below Firestore's 20,000 daily free writes (< 1%)
+    if (sessionStartRef.current && sessionIdRef.current && lec) {
+      const now = new Date()
+      const elapsedSecs = Math.max(0, Math.round((now.getTime() - sessionStartRef.current.getTime()) / 1000))
+      if (elapsedSecs >= 5 && (elapsedSecs - lastSessionSavedElapsedRef.current >= 30)) {
+        lastSessionSavedElapsedRef.current = elapsedSecs
+        upsertActiveSession(user.uid, sessionIdRef.current, {
+          lectureId: lec.id,
+          subjectId: lec.subjectId,
+          chapterId: lec.chapterId,
+          subjectName: lec.subjectName,
+          startedAt: sessionStartRef.current,
+          endedAt: now,
+          duration: elapsedSecs,
+        }).catch(() => {})
+      }
+    }
   }, [user, lectureId, updateProgressMap])
 
   const startSaving = useCallback(() => {
@@ -567,11 +616,23 @@ export default function WatchPage() {
   const endSession = useCallback(() => {
     const lec = lectureRef.current
     if (!sessionStartRef.current || !user || !lec) return
-    createSession(user.uid, {
-      lectureId: lec.id, subjectId: lec.subjectId, chapterId: lec.chapterId,
-      subjectName: lec.subjectName, startedAt: sessionStartRef.current, endedAt: new Date(),
-    })
+    const now = new Date()
+    const elapsedSecs = Math.max(0, Math.round((now.getTime() - sessionStartRef.current.getTime()) / 1000))
+    if (elapsedSecs >= 5) {
+      const sessionId = sessionIdRef.current || `rec_${Date.now()}`
+      upsertActiveSession(user.uid, sessionId, {
+        lectureId: lec.id,
+        subjectId: lec.subjectId,
+        chapterId: lec.chapterId,
+        subjectName: lec.subjectName,
+        startedAt: sessionStartRef.current,
+        endedAt: now,
+        duration: elapsedSecs,
+      }).catch(() => {})
+    }
     sessionStartRef.current = null
+    sessionIdRef.current = null
+    lastSessionSavedElapsedRef.current = 0
   }, [user])
 
   const startIdleTimer = useCallback(() => {
@@ -1093,6 +1154,48 @@ export default function WatchPage() {
       </div>
     )
   }
+
+  // ── Lecture Lock Guard UI (PRD §7.2, §7.3) ────────────────────────
+  if (lockedByScheduleId) {
+    return (
+      <div className="min-h-screen bg-[#080C10] flex items-center justify-center p-6">
+        <div className="text-center space-y-5 max-w-md bg-[#111820] border border-[#1E2A36] p-8 rounded-2xl shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-[#EF4444]/10 border border-[#EF4444]/20 flex items-center justify-center mx-auto text-[#EF4444]">
+            <Lock size={32} />
+          </div>
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#EF4444] text-xs font-semibold mb-3">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]" />
+              </span>
+              <span>LIVE SCHEDULED</span>
+            </div>
+            <h1 className="text-xl font-bold text-[#F8FAFC]">এই ক্লাসটি Live Schedule-এ রয়েছে</h1>
+            {lecture && <p className="text-sm text-[#94A3B8] mt-1.5 font-medium">{lecture.title}</p>}
+          </div>
+          <p className="text-xs text-[#64748B] leading-relaxed">
+            এই লেকচারটি নির্ধারিত সময়ে Live সম্প্রচারিত হবে। Class শেষ না হওয়া পর্যন্ত Recorded Mode-এ দেখা যাবে না।
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+            <Link to={ROUTES.SCHEDULE} className="flex-1">
+              <button className="w-full flex items-center justify-center gap-2 border border-[#1E2A36] hover:border-[#334155] text-[#94A3B8] hover:text-[#F8FAFC] text-sm font-medium px-4 py-2.5 rounded-xl transition-colors cursor-pointer">
+                <ChevronLeft size={16} />
+                Schedule দেখুন
+              </button>
+            </Link>
+            <Link to={buildRoute(ROUTES.LIVE_WATCH, { scheduleId: lockedByScheduleId })} className="flex-1">
+              <button className="w-full flex items-center justify-center gap-2 bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors cursor-pointer shadow-lg shadow-[#6366F1]/20">
+                <Play size={16} className="fill-white" />
+                Live Room-এ যান
+              </button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!lecture) {
     return (
       <div className="min-h-screen bg-[#0B0F14] flex items-center justify-center text-[#64748B]">

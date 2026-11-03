@@ -5,6 +5,7 @@ import {
   CheckCircle2, Star, Loader2, AlertCircle, CheckCircle,
   Sparkles, Clock, Paperclip, ExternalLink, GripVertical, FileText,
   Code2, Eye, ClipboardCopy, Check, BookOpen, GraduationCap, ChevronDown,
+  Lock,
 } from 'lucide-react'
 import {
   getSubject,
@@ -18,6 +19,8 @@ import {
   updateChapterResources,
 } from '@/services/curriculum.service'
 import { fetchYouTubeMetadata } from '@/services/youtube.service'
+import { getLectureLockStatus } from '@/services/schedule.service'
+import { initClockSync, getReliableTime } from '@/services/serverTime.service'
 import type { Subject, Chapter, Lecture, LectureTimestamp, LectureAttachment, AttachmentType, ChapterResource } from '@/types/curriculum.types'
 import ResourcesSection from '@/pages/chapters/ResourcesSection'
 
@@ -331,6 +334,15 @@ export default function ChapterDetailPage() {
   // ── Engineering admission state ────────────────────────────────────
   const [isEngineeringAdmission, setIsEngineeringAdmission] = useState(false)
 
+  // ── Reliable Server Time for Live Lock Status ──────────────────────
+  const [reliableNowMs, setReliableNowMs] = useState(Date.now())
+
+  useEffect(() => {
+    initClockSync().then(() => {
+      setReliableNowMs(getReliableTime())
+    }).catch(() => {})
+  }, [])
+
   // Keyboard shortcut ref for modal
   const modalKeyRef = useRef<((e: KeyboardEvent) => void) | null>(null)
 
@@ -393,6 +405,14 @@ export default function ChapterDetailPage() {
   }
 
   const openEdit = (l: Lecture) => {
+    const lockStatus = getLectureLockStatus(
+      { lockedScheduleId: l.lockedScheduleId, lockedUntil: l.lockedUntil },
+      reliableNowMs
+    )
+    if (lockStatus.isLocked) {
+      alert('এই লেকচারটি বর্তমানে একটি লাইভ শিডিউলে লক করা আছে। শিডিউল শেষ না হওয়া পর্যন্ত এটি এডিট করা যাবে না।')
+      return
+    }
     resetForm()
     setEditingLecture(l)
     setLectureTitle(l.title)
@@ -503,6 +523,15 @@ export default function ChapterDetailPage() {
 
   const handleDelete = async () => {
     if (!user || !deleteTarget || !subject || !chapter) return
+    const lockStatus = getLectureLockStatus(
+      { lockedScheduleId: deleteTarget.lockedScheduleId, lockedUntil: deleteTarget.lockedUntil },
+      reliableNowMs
+    )
+    if (lockStatus.isLocked) {
+      alert('এই লেকচারটি বর্তমানে একটি লাইভ শিডিউলে লক করা আছে। শিডিউল শেষ না হওয়া পর্যন্ত এটি মুছে ফেলা যাবে না।')
+      setDeleteTarget(null)
+      return
+    }
     setIsSubmitting(true)
     await deleteLecture(user.uid, deleteTarget.id, chapter.id, subject.id)
     setDeleteTarget(null)
@@ -597,18 +626,27 @@ export default function ChapterDetailPage() {
                   const progress = getLectureProgress(l.id)
                   const hasAtt = (l.attachments?.length ?? 0) > 0
                   const hasTs = (l.timestamps?.length ?? 0) > 0
+                  const lockStatus = getLectureLockStatus(
+                    { lockedScheduleId: l.lockedScheduleId, lockedUntil: l.lockedUntil },
+                    reliableNowMs
+                  )
+                  const isLocked = lockStatus.isLocked
                   return (
                     <div
                       key={l.id}
                       className="group flex items-center gap-3 bg-gradient-to-r from-[#F59E0B]/8 to-[#111820] border border-[#F59E0B]/25 rounded-xl hover:border-[#F59E0B]/50 transition-all overflow-hidden"
                     >
                       <Link
-                        to={buildRoute(ROUTES.WATCH, { lectureId: l.id })}
+                        to={isLocked && lockStatus.scheduleId ? buildRoute(ROUTES.LIVE_WATCH, { scheduleId: lockStatus.scheduleId }) : buildRoute(ROUTES.WATCH, { lectureId: l.id })}
                         className="flex items-center gap-3 flex-1 min-w-0 p-3 pr-1"
                       >
                         <div className="w-8 shrink-0 flex flex-col items-center gap-1">
                           <span className="text-xs font-mono text-[#F59E0B]/60">{String(idx + 1).padStart(2, '0')}</span>
-                          {completed ? (
+                          {isLocked ? (
+                            <div className="w-4 h-4 rounded-full bg-[#EF4444]/20 border border-[#EF4444]/40 flex items-center justify-center text-[#EF4444]" title="Scheduled for Live">
+                              <Lock size={10} />
+                            </div>
+                          ) : completed ? (
                             <CheckCircle2 size={14} className="text-[#22C55E]" />
                           ) : progress > 0 ? (
                             <div className="w-3 h-3 rounded-full border-2 border-[#F59E0B]" />
@@ -616,15 +654,31 @@ export default function ChapterDetailPage() {
                             <GraduationCap size={13} className="text-[#F59E0B]/60" />
                           )}
                         </div>
-                        <img
-                          src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
-                          alt=""
-                          className="w-20 h-12 rounded-lg object-cover shrink-0 bg-[#17202A] ring-1 ring-[#F59E0B]/20"
-                          loading="lazy"
-                        />
+                        <div className="relative shrink-0">
+                          <img
+                            src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
+                            alt=""
+                            className={`w-20 h-12 rounded-lg object-cover bg-[#17202A] ring-1 ring-[#F59E0B]/20 ${isLocked ? 'opacity-70' : ''}`}
+                            loading="lazy"
+                          />
+                          {isLocked && (
+                            <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+                              <Lock size={14} className="text-[#EF4444]" />
+                            </div>
+                          )}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-medium text-[#F8FAFC] truncate">{l.title}</p>
+                            {isLocked && (
+                              <span className="inline-flex items-center gap-1 bg-[#EF4444]/15 border border-[#EF4444]/30 text-[#EF4444] text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                                <span className="relative flex h-1.5 w-1.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#EF4444]" />
+                                </span>
+                                LIVE
+                              </span>
+                            )}
                             {l.isImportant && <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />}
                             {hasAtt && <Paperclip size={12} className="text-[#64748B] shrink-0" />}
                             {hasTs && <Clock size={12} className="text-[#64748B] shrink-0" />}
@@ -636,7 +690,14 @@ export default function ChapterDetailPage() {
                       <div className="flex items-center gap-1 pr-3 shrink-0">
                         {l.slideUrl && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPreviewSlide({ url: l.slideUrl!, title: l.title }) }}
+                            onClick={(e) => {
+                              e.stopPropagation(); e.preventDefault();
+                              if (isLocked) {
+                                alert('এই লেকচারটি বর্তমানে Live Schedule-এ লক করা আছে। Slide দেখতে Live Room-এ যোগ দিন বা ক্লাস শেষ হওয়ার অপেক্ষা করুন।')
+                                return
+                              }
+                              setPreviewSlide({ url: l.slideUrl!, title: l.title })
+                            }}
                             className="p-1.5 rounded-lg text-[#818CF8] hover:text-[#A5B4FC] hover:bg-[#6366F1]/15 transition-colors cursor-pointer"
                             title="Open Lecture Slide (in-app)"
                           >
@@ -661,8 +722,13 @@ export default function ChapterDetailPage() {
                         </button>
                         <button
                           onClick={() => openEdit(l)}
-                          className="p-1.5 rounded-lg text-[#64748B] hover:text-[#818CF8] hover:bg-[#6366F1]/10 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
-                          title="Edit"
+                          disabled={isLocked}
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            isLocked
+                              ? 'text-[#475569] cursor-not-allowed opacity-40'
+                              : 'text-[#64748B] hover:text-[#818CF8] hover:bg-[#6366F1]/10 cursor-pointer opacity-0 group-hover:opacity-100'
+                          }`}
+                          title={isLocked ? 'Locked in Live Schedule' : 'Edit'}
                         >
                           <Pencil size={13} />
                         </button>
@@ -690,20 +756,29 @@ export default function ChapterDetailPage() {
               const progress = getLectureProgress(l.id)
               const hasAtt = (l.attachments?.length ?? 0) > 0
               const hasTs = (l.timestamps?.length ?? 0) > 0
+              const lockStatus = getLectureLockStatus(
+                { lockedScheduleId: l.lockedScheduleId, lockedUntil: l.lockedUntil },
+                reliableNowMs
+              )
+              const isLocked = lockStatus.isLocked
               return (
                 <div
                   key={l.id}
                   className="group flex items-center gap-3 bg-[#111820] border border-[#1E2A36] rounded-xl hover:border-[#6366F1]/40 transition-all overflow-hidden"
                 >
-                  {/* Clickable area: number + thumbnail + info → navigate to watch */}
+                  {/* Clickable area: number + thumbnail + info → navigate to watch (or live room if locked) */}
                   <Link
-                    to={buildRoute(ROUTES.WATCH, { lectureId: l.id })}
+                    to={isLocked && lockStatus.scheduleId ? buildRoute(ROUTES.LIVE_WATCH, { scheduleId: lockStatus.scheduleId }) : buildRoute(ROUTES.WATCH, { lectureId: l.id })}
                     className="flex items-center gap-3 flex-1 min-w-0 p-3 pr-1"
                   >
                     {/* Number + completion */}
                     <div className="w-8 shrink-0 flex flex-col items-center gap-1">
                       <span className="text-xs font-mono text-[#475569]">{String(idx + 1).padStart(2, '0')}</span>
-                      {completed ? (
+                      {isLocked ? (
+                        <div className="w-4 h-4 rounded-full bg-[#EF4444]/20 border border-[#EF4444]/40 flex items-center justify-center text-[#EF4444]" title="Scheduled for Live">
+                          <Lock size={10} />
+                        </div>
+                      ) : completed ? (
                         <CheckCircle2 size={14} className="text-[#22C55E]" />
                       ) : progress > 0 ? (
                         <div className="w-3 h-3 rounded-full border-2 border-[#6366F1]" />
@@ -713,17 +788,33 @@ export default function ChapterDetailPage() {
                     </div>
 
                     {/* Thumbnail */}
-                    <img
-                      src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
-                      alt=""
-                      className="w-20 h-12 rounded-lg object-cover shrink-0 bg-[#17202A]"
-                      loading="lazy"
-                    />
+                    <div className="relative shrink-0">
+                      <img
+                        src={getThumbnailUrl(l.youtubeVideoId, 'medium')}
+                        alt=""
+                        className={`w-20 h-12 rounded-lg object-cover bg-[#17202A] ${isLocked ? 'opacity-70' : ''}`}
+                        loading="lazy"
+                      />
+                      {isLocked && (
+                        <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+                          <Lock size={14} className="text-[#EF4444]" />
+                        </div>
+                      )}
+                    </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-medium text-[#F8FAFC] truncate">{l.title}</p>
+                        {isLocked && (
+                          <span className="inline-flex items-center gap-1 bg-[#EF4444]/15 border border-[#EF4444]/30 text-[#EF4444] text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75" />
+                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#EF4444]" />
+                            </span>
+                            LIVE
+                          </span>
+                        )}
                         {l.isImportant && <Star size={12} className="text-[#F59E0B] fill-[#F59E0B] shrink-0" />}
                         {hasAtt && <Paperclip size={12} className="text-[#64748B] shrink-0" aria-label="Has attachments" />}
                         {hasTs && <Clock size={12} className="text-[#64748B] shrink-0" aria-label="Has timestamps" />}
@@ -738,7 +829,14 @@ export default function ChapterDetailPage() {
                     {/* Document / Slide Button */}
                     {l.slideUrl && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPreviewSlide({ url: l.slideUrl!, title: l.title }) }}
+                        onClick={(e) => {
+                          e.stopPropagation(); e.preventDefault();
+                          if (isLocked) {
+                            alert('এই লেকচারটি বর্তমানে Live Schedule-এ লক করা আছে। Slide দেখতে Live Room-এ যোগ দিন বা ক্লাস শেষ হওয়ার অপেক্ষা করুন।')
+                            return
+                          }
+                          setPreviewSlide({ url: l.slideUrl!, title: l.title })
+                        }}
                         className="p-1.5 rounded-lg text-[#818CF8] hover:text-[#A5B4FC] hover:bg-[#6366F1]/15 transition-colors cursor-pointer"
                         title="Open Lecture Slide (in-app)"
                         aria-label="Open Lecture Slide"
@@ -768,8 +866,13 @@ export default function ChapterDetailPage() {
                     </button>
                     <button
                       onClick={() => openEdit(l)}
-                      className="p-1.5 rounded-lg text-[#64748B] hover:text-[#818CF8] hover:bg-[#6366F1]/10 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
-                      title="Edit"
+                      disabled={isLocked}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        isLocked
+                          ? 'text-[#475569] cursor-not-allowed opacity-40'
+                          : 'text-[#64748B] hover:text-[#818CF8] hover:bg-[#6366F1]/10 cursor-pointer opacity-0 group-hover:opacity-100'
+                      }`}
+                      title={isLocked ? 'Locked in Live Schedule' : 'Edit'}
                       aria-label="Edit lecture"
                     >
                       <Pencil size={13} />

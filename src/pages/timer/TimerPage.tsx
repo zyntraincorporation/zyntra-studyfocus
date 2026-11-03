@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getSubjects } from '@/services/curriculum.service'
-import { createSession } from '@/services/sessions.service'
+import { createSession, upsertActiveSession } from '@/services/sessions.service'
 import type { Subject } from '@/types/curriculum.types'
 import { BreakQuote } from '@/components/ui/ExitQuoteModal'
 
@@ -93,6 +93,8 @@ export default function TimerPage() {
   // Background-safe timestamp refs
   const startedAtRef    = useRef<number | null>(null)
   const baseElapsedRef  = useRef(0)
+  const sessionIdRef    = useRef<string | null>(null)
+  const sessionStartedDateRef = useRef<Date | null>(null)
   const rafRef          = useRef<number | null>(null)
   const lastChimeRef    = useRef<number>(-1)
   const subjectsRef     = useRef<Subject[]>([])
@@ -204,6 +206,41 @@ export default function TimerPage() {
   // ── Persist on change ────────────────────────────────────────────────────
   useEffect(() => { persistState() }, [persistState])
 
+  // ── Progressive autosave every 30s while timer is running ──────────────────
+  // Free-tier friendly: 30s interval uses only ~120 writes/hour out of Firebase's 20,000 daily free writes (< 1%)
+  useEffect(() => {
+    if (!running || !user || !selectedSubject) return
+
+    const heartbeatTimer = setInterval(() => {
+      let totalElapsed = baseElapsedRef.current
+      if (startedAtRef.current !== null) {
+        totalElapsed += Math.floor((Date.now() - startedAtRef.current) / 1000)
+      }
+
+      if (totalElapsed >= 5) {
+        if (!sessionIdRef.current) {
+          sessionIdRef.current = crypto.randomUUID?.() || `timer_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+        }
+        const now = new Date()
+        const startedAt = sessionStartedDateRef.current || new Date(now.getTime() - totalElapsed * 1000)
+        if (!sessionStartedDateRef.current) sessionStartedDateRef.current = startedAt
+
+        upsertActiveSession(user.uid, sessionIdRef.current, {
+          lectureId: 'timer_deepwork',
+          subjectId: selectedSubject.id,
+          chapterId: 'timer',
+          subjectName: selectedSubject.name,
+          startedAt,
+          endedAt: now,
+          duration: totalElapsed,
+          timerMode: 'pomodoro-45',
+        }).catch(() => {})
+      }
+    }, 30000)
+
+    return () => clearInterval(heartbeatTimer)
+  }, [running, user, selectedSubject])
+
   // ── beforeunload — auto-save whatever seconds were done ──────────────────
   useEffect(() => {
     const onUnload = () => {
@@ -217,14 +254,16 @@ export default function TimerPage() {
 
       if (user && selectedSubject && totalElapsed > 0) {
         const endedAt = new Date()
-        const startedAt = new Date(endedAt.getTime() - totalElapsed * 1000)
-        createSession(user.uid, {
+        const startedAt = sessionStartedDateRef.current || new Date(endedAt.getTime() - totalElapsed * 1000)
+        const sessionId = sessionIdRef.current || `timer_${Date.now()}`
+        upsertActiveSession(user.uid, sessionId, {
           lectureId: 'timer_deepwork',
           subjectId: selectedSubject.id,
           chapterId: 'timer',
           subjectName: selectedSubject.name,
           startedAt,
           endedAt,
+          duration: totalElapsed,
           timerMode: 'pomodoro-45',
         }).catch(() => {})
       }
@@ -260,6 +299,12 @@ export default function TimerPage() {
       setRunning(false)
     } else {
       // Resume: start from current elapsed time
+      if (!sessionIdRef.current) {
+        sessionIdRef.current = crypto.randomUUID?.() || `timer_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+      }
+      if (!sessionStartedDateRef.current) {
+        sessionStartedDateRef.current = new Date(Date.now() - baseElapsedRef.current * 1000)
+      }
       startedAtRef.current = Date.now()
       setRunning(true)
       setSaved(false)
@@ -272,6 +317,8 @@ export default function TimerPage() {
     setSaved(false)
     baseElapsedRef.current = 0
     startedAtRef.current = null
+    sessionIdRef.current = null
+    sessionStartedDateRef.current = null
     lastChimeRef.current = -1
     setDisplay(0)
     clearState()
@@ -294,18 +341,22 @@ export default function TimerPage() {
     setRunning(false)
 
     const endedAt = new Date()
-    const startedAt = new Date(endedAt.getTime() - totalElapsed * 1000)
+    const startedAt = sessionStartedDateRef.current || new Date(endedAt.getTime() - totalElapsed * 1000)
+    const sessionId = sessionIdRef.current || `timer_${Date.now()}`
 
-    await createSession(user.uid, {
+    await upsertActiveSession(user.uid, sessionId, {
       lectureId: 'timer_deepwork',
       subjectId: selectedSubject.id,
       chapterId: 'timer',
       subjectName: selectedSubject.name,
       startedAt,
       endedAt,
+      duration: totalElapsed,
       timerMode: 'pomodoro-45',
     })
 
+    sessionIdRef.current = null
+    sessionStartedDateRef.current = null
     baseElapsedRef.current = 0
     setDisplay(0)
     lastChimeRef.current = -1

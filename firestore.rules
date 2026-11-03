@@ -2,21 +2,83 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Core rule: user owns everything under their uid ──────────────
-    // Simple, fast — no extra Firestore reads in rules
-
-    // User profile document
-    match /users/{userId} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == userId;
+    // ── Helper Functions ─────────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // All subcollections under users/{userId}
-    // Covers: subjects, chapters, lectures, progress, notes,
-    //         bookmarks, studySessions, settings, studyPlans
-    match /users/{userId}/{subcollection}/{docId} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == userId;
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Checks if an incoming field value is unchanged (for immutability enforcement)
+    function fieldUnchanged(field) {
+      return request.resource.data[field] == resource.data[field];
+    }
+
+    // ── User Profile ─────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // ── Scheduled Classes (Live Learning System) ─────────────────────
+      match /scheduledClasses/{scheduleId} {
+
+        // Any owner can read their own schedules
+        allow read: if isOwner(userId);
+
+        // CREATE: allow creating new schedule documents (draft or locked)
+        // Must have required fields and valid time range
+        allow create: if isOwner(userId)
+                      && request.resource.data.startAt is timestamp
+                      && request.resource.data.endAt is timestamp
+                      && request.resource.data.endAt > request.resource.data.startAt
+                      && request.resource.data.keys().hasAll([
+                           'lectureId', 'isLocked', 'startAt', 'endAt', 'durationSeconds'
+                         ]);
+
+        // UPDATE: Complex immutability rules
+        allow update: if isOwner(userId)
+                      && (
+                        // CASE 1: Draft update (not locked → still not locked)
+                        // Allow any field change when both old and new are unlocked
+                        (!resource.data.isLocked && !request.resource.data.isLocked)
+
+                        // CASE 2: Lock operation (draft → locked)
+                        // Allow setting isLocked = true, but CRITICAL immutable fields
+                        // must not change after this point.
+                        || (
+                          !resource.data.isLocked
+                          && request.resource.data.isLocked == true
+                          // startAt, endAt, lectureId, durationSeconds are now frozen
+                          && fieldUnchanged('startAt')
+                          && fieldUnchanged('endAt')
+                          && fieldUnchanged('lectureId')
+                          && fieldUnchanged('durationSeconds')
+                          && fieldUnchanged('youtubeVideoId')
+                        )
+
+                        // CASE 3: Already locked → NO modifications allowed at all
+                        // (isLocked is already true: deny all updates to the schedule)
+                        // The absence of a matching case means deny — this is implicit.
+                      );
+
+        // DELETE: Only draft (unlocked) schedules can be deleted
+        allow delete: if isOwner(userId) && !resource.data.isLocked;
+
+        // Attendance subcollection: full owner access
+        // The client enforces idempotency via sessionInstanceId as the doc ID
+        match /attendance/{sessionId} {
+          allow read, write: if isOwner(userId);
+        }
+      }
+
+      // ── Standard Subcollections ─────────────────────────────────────
+      // Covers: subjects, chapters, lectures, progress, notes,
+      //         bookmarks, studySessions, settings, studyPlans,
+      //         trash, studyMaterials, studyMaterialProgress, studyMaterialDaily
+      match /{subcollection}/{docId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Deny all other paths

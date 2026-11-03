@@ -27,7 +27,7 @@ export default function AppLayout() {
         <BottomNav />
       </nav>
 
-      {/* Daily exit quote — shows once per session on tab hide/close */}
+      {/* Daily focus briefing popup — shows on app open with deadlines and today's live classes */}
       <ExitQuoteModal />
     </div>
   )
