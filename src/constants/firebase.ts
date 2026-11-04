@@ -44,7 +44,7 @@ export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const
 export const DEFAULT_SEEK_INTERVAL = 10
 
 // Maximum attachments per lecture
-export const MAX_ATTACHMENTS = 5
+export const MAX_ATTACHMENTS = 10
 
 // ── Live Learning System Constants ────────────────────────────────────────
 // How far behind live (seconds) before DELAYED mode is shown to user

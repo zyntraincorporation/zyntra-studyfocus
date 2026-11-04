@@ -75,6 +75,10 @@ export interface ScheduledClass {
   rangeEndSeconds?: number        // Ending second in original video (default: durationSeconds)
   originalVideoDuration?: number  // Original full lecture duration in seconds
 
+  // ── Playback Speed ──────────────────────────────────────────────────
+  // Speed at which the live class runs (e.g. 1, 1.25, 1.5, 1.75, 2). Default: 1.
+  playbackSpeed?: number
+
   // ── Schedule Timing (all UTC, immutable after lock) ─────────────────
   startAt: Timestamp              // Scheduled start (Asia/Dhaka → UTC stored)
   endAt: Timestamp                // Calculated: startAt + durationSeconds (immutable)
@@ -109,6 +113,8 @@ export interface ScheduledClassDraftInput {
   rangeStartSeconds?: number
   rangeEndSeconds?: number
   originalVideoDuration?: number
+  // Playback speed
+  playbackSpeed?: number
 }
 
 // ── Derived Schedule Info (computed client-side) ───────────────────────

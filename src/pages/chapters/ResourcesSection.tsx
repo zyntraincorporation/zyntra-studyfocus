@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import DOMPurify from 'dompurify'
 import {
-  Plus, Trash2, ExternalLink, FileText, Link2, BookOpen,
+  Plus, Trash2, ExternalLink, FileText, Link2, BookOpen, FolderOpen,
   Sparkles, Loader2, ChevronDown, ChevronUp, Pencil, AlertCircle, X,
   Maximize, Minimize,
   ZoomIn, ZoomOut, Maximize2, Minimize2, Search, AlertTriangle,
@@ -12,6 +12,7 @@ import { callPolishNote } from '@/services/note-polish.service'
 import { moveToTrash } from '@/services/trash.service'
 import { useAuth } from '@/contexts/AuthContext'
 import { renderMathInHtml } from '@/utils/mathRenderer'
+import { isDriveFolderUrl, extractDriveFolderId, toDriveFolderEmbedUrl } from '@/utils/drive.utils'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 
@@ -65,14 +66,19 @@ function stripMarkdownFences(raw: string): string {
 }
 
 const TYPE_CONFIG: Record<ChapterResourceType, { icon: React.ReactNode; label: string; color: string }> = {
-  pdf:  { icon: <FileText size={14} />,  label: 'PDF',  color: '#EF4444' },
-  link: { icon: <Link2 size={14} />,     label: 'Link', color: '#38BDF8' },
-  note: { icon: <BookOpen size={14} />,  label: 'Note', color: '#34D399' },
+  pdf:    { icon: <FileText size={14} />,   label: 'PDF',          color: '#EF4444' },
+  folder: { icon: <FolderOpen size={14} />, label: 'Drive Folder', color: '#F59E0B' },
+  link:   { icon: <Link2 size={14} />,      label: 'Link',         color: '#38BDF8' },
+  note:   { icon: <BookOpen size={14} />,   label: 'Note',         color: '#34D399' },
 }
 
 function toEmbedUrl(url: string, type?: ChapterResourceType): string {
   if (!url) return ''
   const trimmed = url.trim()
+  if (type === 'folder' || isDriveFolderUrl(trimmed)) {
+    const fid = extractDriveFolderId(trimmed)
+    if (fid) return toDriveFolderEmbedUrl(fid)
+  }
   if (trimmed.includes('/preview')) return trimmed
   if (trimmed.includes('docs.google.com/viewer')) return trimmed
   const driveFile = trimmed.match(/drive\.google\.com\/file\/d\/([^/?#]+)/)
@@ -315,7 +321,7 @@ function FullscreenViewer({
   )
 }
 
-// ── PDF / Link Fullscreen Viewer ──────────────────────────────────────
+// ── PDF / Folder / Link Fullscreen Viewer ────────────────────────────
 
 function EmbedViewerModal({
   resource,
@@ -327,12 +333,19 @@ function EmbedViewerModal({
   const [iframeError, setIframeError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [useAltViewer, setUseAltViewer] = useState(false)
+  const [folderLayout, setFolderLayout] = useState<'list' | 'grid'>('list')
 
   const rawUrl = resource.url ?? ''
   const isDrive = rawUrl.includes('drive.google.com') || rawUrl.includes('docs.google.com')
+  const isFolder = resource.type === 'folder' || isDriveFolderUrl(rawUrl)
 
   let embedUrl = toEmbedUrl(rawUrl, resource.type)
-  if (useAltViewer) {
+  if (isFolder) {
+    const fid = extractDriveFolderId(rawUrl)
+    if (fid) {
+      embedUrl = toDriveFolderEmbedUrl(fid, folderLayout)
+    }
+  } else if (useAltViewer) {
     if (embedUrl.includes('docs.google.com/viewer')) {
       embedUrl = rawUrl
     } else {
@@ -347,7 +360,36 @@ function EmbedViewerModal({
       onClose={onClose}
       externalUrl={resource.url}
       extraAction={
-        !isDrive && resource.type === 'pdf' ? (
+        isFolder ? (
+          <div className="flex items-center bg-[#111820] border border-[#1E2A36] rounded-lg p-0.5 mr-1">
+            <button
+              type="button"
+              onClick={() => {
+                setFolderLayout('list')
+                setIsLoading(true)
+              }}
+              className={`px-2 py-0.5 rounded text-xs transition-colors cursor-pointer ${
+                folderLayout === 'list' ? 'bg-[#1E2A36] text-[#F8FAFC]' : 'text-[#64748B] hover:text-[#94A3B8]'
+              }`}
+              title="List view"
+            >
+              List
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFolderLayout('grid')
+                setIsLoading(true)
+              }}
+              className={`px-2 py-0.5 rounded text-xs transition-colors cursor-pointer ${
+                folderLayout === 'grid' ? 'bg-[#1E2A36] text-[#F8FAFC]' : 'text-[#64748B] hover:text-[#94A3B8]'
+              }`}
+              title="Grid view"
+            >
+              Grid
+            </button>
+          </div>
+        ) : !isDrive && resource.type === 'pdf' ? (
           <button
             onClick={() => {
               setUseAltViewer((v) => !v)
@@ -366,7 +408,7 @@ function EmbedViewerModal({
         {isLoading && !iframeError && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#080C12] z-10">
             <Loader2 size={30} className="animate-spin text-[#818CF8]" />
-            <p className="text-xs text-[#64748B]">Loading document...</p>
+            <p className="text-xs text-[#64748B]">{isFolder ? 'Loading folder...' : 'Loading document...'}</p>
           </div>
         )}
         {!iframeError ? (
@@ -375,13 +417,13 @@ function EmbedViewerModal({
             src={embedUrl}
             className="w-full h-full border-none bg-[#0B0F14] block"
             title={resource.title}
-            allow="autoplay"
+            allow="autoplay; fullscreen"
             onLoad={() => setIsLoading(false)}
             onError={() => { setIsLoading(false); setIframeError(true) }}
           />
         ) : (
           <div className="flex flex-col items-center justify-center gap-4 h-full text-center px-4">
-            <FileText size={48} className="text-[#1E2A36]" />
+            {isFolder ? <FolderOpen size={48} className="text-[#1E2A36]" /> : <FileText size={48} className="text-[#1E2A36]" />}
             <p className="text-sm text-[#64748B]">This content cannot be previewed directly.</p>
             <a
               href={resource.url}
@@ -624,8 +666,8 @@ function ResourceFormModal({
         {/* Type selector */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-[#94A3B8]">Resource Type</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['note', 'pdf', 'link'] as ChapterResourceType[]).map((t) => {
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {(['note', 'folder', 'pdf', 'link'] as ChapterResourceType[]).map((t) => {
               const cfg = TYPE_CONFIG[t]
               const active = type === t
               return (
@@ -633,7 +675,7 @@ function ResourceFormModal({
                   key={t}
                   type="button"
                   onClick={() => setType(t)}
-                  className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                     active
                       ? 'border-[#6366F1] bg-[#6366F1]/15 text-[#F8FAFC]'
                       : 'border-[#1E2A36] bg-[#111820] text-[#64748B] hover:text-[#94A3B8] hover:border-[#2D3A4A]'
@@ -647,18 +689,34 @@ function ResourceFormModal({
           </div>
         </div>
 
-        {/* URL for PDF / Link */}
+        {/* URL for Folder / PDF / Link */}
         {type !== 'note' && (
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-[#94A3B8]">
-              {type === 'pdf' ? 'PDF URL (Google Drive preview or direct link)' : 'URL'}
+              {type === 'folder'
+                ? 'Google Drive Folder URL'
+                : type === 'pdf'
+                ? 'PDF URL (Google Drive preview or direct link)'
+                : 'URL'}
             </label>
             <div className="relative">
               <input
                 type="url"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder={type === 'pdf' ? 'https://drive.google.com/file/d/.../view or https://...file.pdf' : 'https://...'}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setUrl(val)
+                  if (type !== 'folder' && isDriveFolderUrl(val)) {
+                    setType('folder')
+                  }
+                }}
+                placeholder={
+                  type === 'folder'
+                    ? 'https://drive.google.com/drive/folders/...'
+                    : type === 'pdf'
+                    ? 'https://drive.google.com/file/d/.../view or https://...file.pdf'
+                    : 'https://...'
+                }
                 className="w-full bg-[#111820] border border-[#1E2A36] rounded-xl px-3 py-2.5 pr-8 text-sm text-[#F8FAFC] placeholder-[#475569] focus:outline-none focus:ring-1 focus:ring-[#6366F1]"
               />
               {url && isValidUrl(url) && (
@@ -667,6 +725,11 @@ function ResourceFormModal({
                 </a>
               )}
             </div>
+            {type === 'folder' && (
+              <p className="text-[10px] text-[#F59E0B]">
+                💡 ড্রাইভ ফোল্ডারের লিঙ্ক দিলে শিক্ষার্থীরা ড্রাইভ অ্যাপে না গিয়ে সরাসরি ওয়েবসাইটের ভেতরেই সব ফাইল ও লেকচার নোট পড়তে পারবে।
+              </p>
+            )}
             {url && !isValidUrl(url) && <p className="text-[10px] text-[#EF4444]">Please enter a valid URL (https://...)</p>}
           </div>
         )}

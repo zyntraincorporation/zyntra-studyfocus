@@ -153,8 +153,9 @@ export async function createDraftSchedule(
   userId: string,
   input: ScheduledClassDraftInput
 ): Promise<string> {
+  const speed = input.playbackSpeed && input.playbackSpeed > 0 ? input.playbackSpeed : 1
   const startAt = scheduledDateTimeToTimestamp(input.scheduledDate, input.scheduledStartTime)
-  const totalDurationSecs = getTotalScheduledDuration(input.durationSeconds)
+  const totalDurationSecs = getTotalScheduledDuration(input.durationSeconds, speed)
   const endAt = Timestamp.fromMillis(startAt.toMillis() + totalDurationSecs * 1000)
 
   const ref = await addDoc(schedulesCol(userId), {
@@ -172,6 +173,7 @@ export async function createDraftSchedule(
     rangeStartSeconds: input.rangeStartSeconds ?? 0,
     rangeEndSeconds: input.rangeEndSeconds ?? input.durationSeconds,
     originalVideoDuration: input.originalVideoDuration ?? input.durationSeconds,
+    playbackSpeed: speed,
     startAt,
     endAt,
     timezone: 'Asia/Dhaka',
@@ -203,12 +205,15 @@ export async function updateDraftSchedule(
 
   if (input.scheduledDate && input.scheduledStartTime) {
     const durationSecs = input.durationSeconds ?? existing.durationSeconds
-    const totalDurationSecs = getTotalScheduledDuration(durationSecs)
+    const speed = input.playbackSpeed ?? existing.playbackSpeed ?? 1
+    const totalDurationSecs = getTotalScheduledDuration(durationSecs, speed)
     const startAt = scheduledDateTimeToTimestamp(input.scheduledDate, input.scheduledStartTime)
     const endAt = Timestamp.fromMillis(startAt.toMillis() + totalDurationSecs * 1000)
     updates.startAt = startAt
     updates.endAt = endAt
   }
+
+  if (input.playbackSpeed !== undefined) updates.playbackSpeed = input.playbackSpeed
 
   if (input.lectureId !== undefined) updates.lectureId = input.lectureId
   if (input.title !== undefined) updates.title = input.title

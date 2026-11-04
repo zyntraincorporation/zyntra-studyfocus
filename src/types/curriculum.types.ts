@@ -26,7 +26,7 @@ export interface LectureAttachment {
 }
 
 // ── Chapter Resources ─────────────────────────────────────────────────
-export type ChapterResourceType = 'pdf' | 'link' | 'note'
+export type ChapterResourceType = 'pdf' | 'link' | 'note' | 'folder'
 
 export interface ChapterResource {
   id: string                // crypto.randomUUID()

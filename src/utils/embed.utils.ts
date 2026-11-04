@@ -5,6 +5,8 @@
  * reliable embed/preview URLs for in-app modals.
  */
 
+import { extractDriveFolderId, isDriveFolderUrl } from './drive.utils'
+
 export function toSlideEmbedUrl(rawUrl: string, useGoogleViewerForPdf = false): string {
   if (!rawUrl) return ''
   let url = rawUrl.trim()
@@ -13,6 +15,14 @@ export function toSlideEmbedUrl(rawUrl: string, useGoogleViewerForPdf = false): 
   // Prepend https:// if missing
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`
+  }
+
+  // Check if it's a Drive folder link
+  if (isDriveFolderUrl(url)) {
+    const folderId = extractDriveFolderId(url)
+    if (folderId) {
+      return `https://drive.google.com/embeddedfolderview?id=${folderId}#list`
+    }
   }
 
   // Already a preview or embed URL
@@ -30,12 +40,6 @@ export function toSlideEmbedUrl(rawUrl: string, useGoogleViewerForPdf = false): 
   const driveId = url.match(/drive\.google\.com\/[^\s]*[?&]id=([^&#]+)/i)
   if (driveId) {
     return `https://drive.google.com/file/d/${driveId[1]}/preview`
-  }
-
-  // Google Drive folder link
-  const driveFolder = url.match(/drive\.google\.com\/drive\/(?:u\/\d+\/)?folders\/([^/?#]+)/i)
-  if (driveFolder) {
-    return `https://drive.google.com/embeddedfolderview?id=${driveFolder[1]}#list`
   }
 
   // Google Docs / Sheets / Slides

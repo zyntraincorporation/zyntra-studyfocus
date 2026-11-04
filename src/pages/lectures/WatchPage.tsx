@@ -48,6 +48,7 @@ import DOMPurify from 'dompurify'
 import { renderMathInHtml } from '@/utils/mathRenderer'
 import DocumentPreviewModal from '@/components/ui/DocumentPreviewModal'
 import { toSlideEmbedUrl } from '@/utils/embed.utils'
+import { isDriveFolderUrl } from '@/utils/drive.utils'
 
 // ── Sanitize lecture note HTML ─────────────────────────────────────────
 function sanitizeWatchNote(html: string): string {
@@ -106,7 +107,7 @@ const QUALITY_LABELS: Record<string, string> = {
 
 const ALL_QUALITIES = ['auto', 'hd1080', 'hd720', 'large', 'medium', 'small', 'tiny']
 
-type SidePanelTab = 'notes' | 'bookmarks' | 'timestamps'
+type SidePanelTab = 'notes' | 'bookmarks' | 'timestamps' | 'attachments'
 const NOTE_CATEGORIES: NoteCategory[] = ['important', 'formula', 'exam', 'confusing', 'revision', 'general']
 const BM_CATEGORIES: BookmarkCategory[] = ['important', 'formula', 'exam_question', 'confusing', 'revision', 'example']
 
@@ -899,6 +900,7 @@ export default function WatchPage() {
     lecture,
     setSlideModalOpen,
     setNoteFullscreen,
+    setResourcePanelOpen,
     setPanelOpen,
     setSpeedOpen,
     setQualityOpen,
@@ -919,6 +921,7 @@ export default function WatchPage() {
       lecture,
       setSlideModalOpen,
       setNoteFullscreen,
+      setResourcePanelOpen,
       setPanelOpen,
       setSpeedOpen,
       setQualityOpen,
@@ -1063,10 +1066,25 @@ export default function WatchPage() {
         return
       }
 
+      // 'a' or 'A' = Attachments side panel
+      if (e.key === 'a' || e.key === 'A') {
+        e.preventDefault()
+        h.openPanel('attachments')
+        return
+      }
+
+      // 'r' or 'R' = Chapter Resources
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault()
+        h.setResourcePanelOpen((prev) => !prev)
+        return
+      }
+
       if (e.key === 'Escape') {
         h.setPanelOpen(false)
         h.setSlideModalOpen(false)
         h.setNoteFullscreen(false)
+        h.setResourcePanelOpen(false)
         h.setSpeedOpen(false)
         h.setQualityOpen(false)
         h.setAttachOpen(false)
@@ -1216,7 +1234,7 @@ export default function WatchPage() {
     <>
       {/* Tab bar */}
       <div className="flex border-b border-[#1E2A36] shrink-0">
-        {(['notes', 'bookmarks', 'timestamps'] as SidePanelTab[]).map((tab) => (
+        {(['notes', 'bookmarks', 'timestamps', 'attachments'] as SidePanelTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -1224,11 +1242,13 @@ export default function WatchPage() {
               activeTab === tab ? 'text-[#818CF8] border-b-2 border-[#6366F1]' : 'text-[#64748B] hover:text-[#F8FAFC]'
             }`}
             aria-label={tab.charAt(0).toUpperCase() + tab.slice(1)}
+            title={`${tab.charAt(0).toUpperCase() + tab.slice(1)} (${tab === 'notes' ? 'N' : tab === 'bookmarks' ? 'B' : tab === 'timestamps' ? 'T' : 'A'})`}
           >
             {tab === 'notes' && <FileText size={12} />}
             {tab === 'bookmarks' && <Bookmark size={12} />}
             {tab === 'timestamps' && <Clock size={12} />}
-            <span className="capitalize">{tab}</span>
+            {tab === 'attachments' && <Paperclip size={12} />}
+            <span className="capitalize">{tab === 'attachments' ? 'Files' : tab}</span>
           </button>
         ))}
         <button
@@ -1297,6 +1317,99 @@ export default function WatchPage() {
             ))}
           </>
         )}
+
+        {activeTab === 'attachments' && (
+          <div className="space-y-3">
+            {/* Lecture Slide / Folder */}
+            {lecture.slideUrl && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-[#64748B] font-semibold uppercase tracking-wider">
+                  Lecture Material
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSlideModalOpen(true)}
+                  className="w-full flex items-start gap-2.5 p-3 rounded-xl bg-[#6366F1]/10 border border-[#6366F1]/25 hover:bg-[#6366F1]/20 hover:border-[#6366F1]/40 transition-all text-left cursor-pointer group"
+                >
+                  <div className="p-2 rounded-lg bg-[#6366F1]/20 text-[#818CF8] shrink-0 mt-0.5">
+                    {isDriveFolderUrl(lecture.slideUrl) ? (
+                      <FolderOpen size={16} className="text-[#F59E0B]" />
+                    ) : (
+                      <FileText size={16} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[#F8FAFC] truncate group-hover:text-[#818CF8] transition-colors">
+                      {isDriveFolderUrl(lecture.slideUrl) ? 'Class Materials Folder' : 'Lecture Slide'}
+                    </p>
+                    <p className="text-[10px] text-[#94A3B8] mt-0.5 truncate">
+                      {isDriveFolderUrl(lecture.slideUrl) ? 'Google Drive Folder' : 'PDF / Presentation'}
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#6366F1]/20 text-[#818CF8] shrink-0">
+                    OPEN
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* Other Attachments list */}
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-[#64748B] font-semibold uppercase tracking-wider">
+                Attachments {(lecture.attachments?.length ?? 0) > 0 ? `(${lecture.attachments!.length})` : ''}
+              </p>
+              {(!lecture.attachments || lecture.attachments.length === 0) && !lecture.slideUrl && (
+                <p className="text-xs text-[#64748B] text-center py-8">
+                  No attachments or slides for this lecture.
+                </p>
+              )}
+              {lecture.attachments?.map((att) => {
+                const isFolder = isDriveFolderUrl(att.url)
+                return (
+                  <button
+                    key={att.id}
+                    type="button"
+                    onClick={() => setActiveAttachment({ url: att.url, title: att.title })}
+                    className="w-full flex items-start gap-2.5 p-2.5 rounded-xl bg-[#111820] border border-[#1E2A36] hover:border-[#6366F1]/40 hover:bg-[#17202A] transition-all text-left cursor-pointer group"
+                  >
+                    <div className="p-1.5 rounded-lg bg-[#1E2A36] shrink-0 mt-0.5">
+                      {isFolder ? (
+                        <FolderOpen size={14} className="text-[#F59E0B]" />
+                      ) : (
+                        <Paperclip size={14} className="text-[#818CF8]" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-[#F8FAFC] truncate group-hover:text-[#818CF8] transition-colors">
+                        {att.title}
+                      </p>
+                      <p className="text-[10px] text-[#64748B] capitalize mt-0.5">
+                        {isFolder ? 'Drive Folder' : (att.type || 'Attachment')}
+                      </p>
+                    </div>
+                    <ExternalLink size={12} className="text-[#475569] group-hover:text-[#818CF8] shrink-0 mt-1 transition-colors" />
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Chapter Resources Link */}
+            {chapterResources.length > 0 && (
+              <div className="pt-2 border-t border-[#1E2A36]">
+                <button
+                  type="button"
+                  onClick={() => setResourcePanelOpen(true)}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[#34D399]/10 border border-[#34D399]/20 hover:bg-[#34D399]/20 transition-all text-left cursor-pointer text-xs font-medium text-[#34D399]"
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    <FolderOpen size={14} /> Chapter Resources ({chapterResources.length})
+                  </span>
+                  <span className="text-[10px] bg-[#34D399]/20 px-1.5 py-0.5 rounded font-bold shrink-0">Press R</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Input footer */}
@@ -1343,8 +1456,10 @@ export default function WatchPage() {
               <Bookmark size={12} /> Bookmark at {currentTimeLabel}
             </Button>
           </>
-        ) : (
+        ) : activeTab === 'timestamps' ? (
           <p className="text-xs text-[#475569] text-center">Click any timestamp to jump to that moment.</p>
+        ) : (
+          <p className="text-xs text-[#475569] text-center">Click any item to view in-app. Shortcut: <kbd className="text-[#818CF8] font-bold">A</kbd></p>
         )}
       </div>
     </>
@@ -1615,64 +1730,31 @@ export default function WatchPage() {
             className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs ${
               resourcePanelOpen ? 'text-[#34D399] bg-[#34D399]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
             }`}
-            title={`Chapter Resources (${chapterResources.length})`}
+            title={`Chapter Resources (${chapterResources.length}) (Shortcut: R)`}
             aria-label="Chapter Resources"
           >
             <FolderOpen size={16} />
             <span className="hidden xl:block ml-1">Resources</span>
+            <span className="hidden lg:inline text-[9px] bg-white/10 text-white/70 px-1 py-0.2 rounded ml-1 font-mono">R</span>
           </button>
         )}
 
-        {/* Attachments */}
+        {/* Attachments Button (opens side panel, shortcut A) */}
         {hasAttachments && (
-          <div className={`relative ${!isFullscreen ? 'max-sm:hidden' : ''}`} data-dropdown>
-            <button
-              onClick={() => { setAttachOpen(!attachOpen); setSpeedOpen(false); setQualityOpen(false); setMoreOpen(false) }}
-              className={`${ctrlBtn} px-1.5 rounded-lg ${
-                attachOpen ? 'text-[#818CF8] bg-[#6366F1]/15' : 'text-white/70 hover:text-white hover:bg-white/10'
-              }`}
-              title="Attachments"
-              aria-label="Attachments"
-            >
-              <Paperclip size={16} />
-            </button>
-            <ControlDropdown open={attachOpen} onClose={() => setAttachOpen(false)}>
-              <div className="px-1 py-1">
-                <p className="text-[10px] text-[#64748B] px-2 py-1 font-semibold uppercase tracking-wide">Attachments</p>
-                {lecture.slideUrl && (
-                  <button
-                    onClick={() => { setAttachOpen(false); setContentTab('slide'); setSlideModalOpen(true) }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#818CF8] bg-[#6366F1]/10 hover:bg-[#6366F1]/20 font-medium transition-colors mb-0.5 cursor-pointer"
-                  >
-                    <FileText size={12} className="shrink-0" />
-                    <span className="truncate max-w-[180px]">Lecture Slide</span>
-                    <span className="ml-auto text-[9px] bg-[#6366F1]/20 text-[#818CF8] px-1.5 py-0.5 rounded font-semibold">VIEW</span>
-                  </button>
-                )}
-                {lecture.noteHtml && (
-                  <button
-                    onClick={() => { setAttachOpen(false); setContentTab('note'); setNoteFullscreen(true) }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#38BDF8] bg-[#38BDF8]/10 hover:bg-[#38BDF8]/20 font-medium transition-colors mb-0.5 cursor-pointer"
-                  >
-                    <BookOpen size={12} className="shrink-0" />
-                    <span className="truncate max-w-[180px]">Interactive Note</span>
-                    <span className="ml-auto text-[9px] bg-[#38BDF8]/20 text-[#38BDF8] px-1.5 py-0.5 rounded font-semibold">NOTE</span>
-                  </button>
-                )}
-                {lecture.attachments?.map((att) => (
-                  <button
-                    key={att.id}
-                    onClick={() => { setAttachOpen(false); setActiveAttachment({ url: att.url, title: att.title }) }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg text-[#94A3B8] hover:bg-[#111820] hover:text-[#F8FAFC] transition-colors cursor-pointer text-left"
-                  >
-                    <Paperclip size={12} className="shrink-0" />
-                    <span className="truncate max-w-[180px]">{att.title}</span>
-                    <FileText size={11} className="shrink-0 opacity-50 ml-auto" />
-                  </button>
-                ))}
-              </div>
-            </ControlDropdown>
-          </div>
+          <button
+            onClick={() => openPanel('attachments')}
+            className={`${!isFullscreen ? 'max-sm:hidden' : ''} ${ctrlBtn} px-1.5 rounded-lg text-xs ${
+              panelOpen && activeTab === 'attachments'
+                ? 'text-[#818CF8] bg-[#6366F1]/15'
+                : 'text-white/70 hover:text-white hover:bg-white/10'
+            }`}
+            title="Attachments (Shortcut: A)"
+            aria-label="Attachments"
+          >
+            <Paperclip size={16} />
+            <span className="hidden xl:block ml-1">Files</span>
+            <span className="hidden lg:inline text-[9px] bg-white/10 text-white/70 px-1 py-0.2 rounded ml-1 font-mono">A</span>
+          </button>
         )}
 
         {/* Mobile More menu (speed + quality) */}
@@ -1893,6 +1975,7 @@ export default function WatchPage() {
                     {activeTab === 'timestamps' && <Clock size={12} className="text-[#818CF8] group-hover:text-white" />}
                     {activeTab === 'notes' && <FileText size={12} className="text-[#818CF8] group-hover:text-white" />}
                     {activeTab === 'bookmarks' && <Bookmark size={12} className="text-[#818CF8] group-hover:text-white" />}
+                    {activeTab === 'attachments' && <Paperclip size={12} className="text-[#818CF8] group-hover:text-white" />}
                   </div>
                 </button>
 
@@ -2179,7 +2262,7 @@ export default function WatchPage() {
       {slideModalOpen && lecture?.slideUrl && (
         <DocumentPreviewModal
           url={lecture.slideUrl}
-          title="Lecture Slide"
+          title={isDriveFolderUrl(lecture.slideUrl) ? 'Class Materials Folder' : 'Lecture Slide'}
           subtitle={lecture.title}
           onClose={() => setSlideModalOpen(false)}
         />

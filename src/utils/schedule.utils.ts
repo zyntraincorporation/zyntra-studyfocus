@@ -23,26 +23,31 @@ export const LONG_CLASS_THRESHOLD_SECONDS = 150 * 60 // 2h 30m (classes around 3
 /**
  * Calculates mandatory break timeline for long marathon classes (around 3h+ / >= 2h30m).
  * Every 1 hour of lecture, a mandatory 10-minute break pauses the lecture.
+ * Supports custom playbackSpeed (e.g. 1.25x, 1.5x, 2x).
  */
 export function calculateScheduleBreakInfo(
   durationSeconds: number,
-  realElapsedSeconds: number
+  realElapsedSeconds: number,
+  playbackSpeed: number = 1
 ): BreakInfo {
-  if (durationSeconds < LONG_CLASS_THRESHOLD_SECONDS) {
+  const speed = playbackSpeed > 0 ? playbackSpeed : 1
+  const activeWallSeconds = Math.round(durationSeconds / speed)
+
+  if (activeWallSeconds < LONG_CLASS_THRESHOLD_SECONDS) {
     return {
       hasBreaks: false,
       isBreakActive: false,
       currentBreakNumber: 0,
       totalBreaks: 0,
       breakRemainingSeconds: 0,
-      expectedVideoPosition: Math.max(0, Math.min(realElapsedSeconds, durationSeconds)),
-      totalScheduledDurationSeconds: durationSeconds,
+      expectedVideoPosition: Math.max(0, Math.min(realElapsedSeconds, activeWallSeconds)),
+      totalScheduledDurationSeconds: activeWallSeconds,
     }
   }
 
   // Number of breaks: 1 after each 1 hour block, provided at least 15m (900s) remain after it
-  const totalBreaks = Math.max(0, Math.floor((durationSeconds - 900) / BREAK_INTERVAL_SECONDS))
-  const totalScheduledDurationSeconds = durationSeconds + totalBreaks * BREAK_DURATION_SECONDS
+  const totalBreaks = Math.max(0, Math.floor((activeWallSeconds - 900) / BREAK_INTERVAL_SECONDS))
+  const totalScheduledDurationSeconds = activeWallSeconds + totalBreaks * BREAK_DURATION_SECONDS
 
   if (realElapsedSeconds <= 0) {
     return {
@@ -64,21 +69,21 @@ export function calculateScheduleBreakInfo(
 
     if (realElapsedSeconds >= lectureStart && realElapsedSeconds < breakStart) {
       // Actively in lecture block k
-      const videoPos = k * BREAK_INTERVAL_SECONDS + (realElapsedSeconds - lectureStart)
+      const elapsedActive = k * BREAK_INTERVAL_SECONDS + (realElapsedSeconds - lectureStart)
       return {
         hasBreaks: true,
         isBreakActive: false,
         currentBreakNumber: k,
         totalBreaks,
         breakRemainingSeconds: 0,
-        expectedVideoPosition: Math.min(videoPos, durationSeconds),
+        expectedVideoPosition: Math.min(elapsedActive, activeWallSeconds),
         totalScheduledDurationSeconds,
       }
     }
 
     if (realElapsedSeconds >= breakStart && realElapsedSeconds < breakEnd) {
       // Actively in mandatory break k + 1
-      const videoPos = (k + 1) * BREAK_INTERVAL_SECONDS
+      const elapsedActive = (k + 1) * BREAK_INTERVAL_SECONDS
       const breakRemainingSeconds = Math.max(0, Math.ceil(breakEnd - realElapsedSeconds))
       return {
         hasBreaks: true,
@@ -86,7 +91,7 @@ export function calculateScheduleBreakInfo(
         currentBreakNumber: k + 1,
         totalBreaks,
         breakRemainingSeconds,
-        expectedVideoPosition: videoPos,
+        expectedVideoPosition: elapsedActive,
         totalScheduledDurationSeconds,
       }
     }
@@ -94,9 +99,9 @@ export function calculateScheduleBreakInfo(
 
   // Past all breaks — in final lecture block
   const finalBlockRealStart = totalBreaks * (BREAK_INTERVAL_SECONDS + BREAK_DURATION_SECONDS)
-  const videoOffset = totalBreaks * BREAK_INTERVAL_SECONDS
+  const wallOffset = totalBreaks * BREAK_INTERVAL_SECONDS
   const elapsedInFinalBlock = Math.max(0, realElapsedSeconds - finalBlockRealStart)
-  const videoPos = Math.min(durationSeconds, videoOffset + elapsedInFinalBlock)
+  const elapsedActive = Math.min(activeWallSeconds, wallOffset + elapsedInFinalBlock)
 
   return {
     hasBreaks: true,
@@ -104,16 +109,16 @@ export function calculateScheduleBreakInfo(
     currentBreakNumber: totalBreaks,
     totalBreaks,
     breakRemainingSeconds: 0,
-    expectedVideoPosition: videoPos,
+    expectedVideoPosition: elapsedActive,
     totalScheduledDurationSeconds,
   }
 }
 
 /**
- * Returns total scheduled duration in seconds, including any mandatory breaks.
+ * Returns total scheduled duration in seconds, including any mandatory breaks and factoring in playbackSpeed.
  */
-export function getTotalScheduledDuration(durationSeconds: number): number {
-  return calculateScheduleBreakInfo(durationSeconds, 0).totalScheduledDurationSeconds
+export function getTotalScheduledDuration(durationSeconds: number, playbackSpeed: number = 1): number {
+  return calculateScheduleBreakInfo(durationSeconds, 0, playbackSpeed).totalScheduledDurationSeconds
 }
 
 // ── Schedule Status Determination ─────────────────────────────────────
@@ -127,7 +132,7 @@ export function getTotalScheduledDuration(durationSeconds: number): number {
 
 /**
  * Derives the current status of a schedule based on reliable server time.
- * Accounts for any mandatory breaks in long classes.
+ * Accounts for any mandatory breaks in long classes and playback speed.
  * @param schedule - The ScheduledClass document
  * @param reliableNowMs - Reliable server-synced timestamp in ms (from getReliableTime())
  */
@@ -138,7 +143,8 @@ export function deriveScheduleStatus(
   if (!schedule.isLocked) return 'draft'
 
   const startMs = schedule.startAt.toMillis()
-  const totalDurationMs = getTotalScheduledDuration(schedule.durationSeconds) * 1000
+  const speed = schedule.playbackSpeed && schedule.playbackSpeed > 0 ? schedule.playbackSpeed : 1
+  const totalDurationMs = getTotalScheduledDuration(schedule.durationSeconds, speed) * 1000
   const effectiveEndMs = Math.max(schedule.endAt.toMillis(), startMs + totalDurationMs)
 
   if (reliableNowMs < startMs) return 'upcoming'
@@ -152,6 +158,7 @@ export function deriveScheduleStatus(
  *   expectedPosition = rangeStartSeconds + elapsedScheduledSeconds
  * Clamped strictly to [rangeStartSeconds, rangeEndSeconds].
  * During automatic breaks in long classes, holding at the break point is enforced.
+ * Factors in schedule.playbackSpeed for accelerated/decelerated playback.
  *
  * @param schedule - The ScheduledClass document
  * @param reliableNowMs - Reliable server-synced timestamp in ms
@@ -163,10 +170,11 @@ export function calculateExpectedLivePosition(
 ): number {
   const startMs = schedule.startAt.toMillis()
   const elapsed = (reliableNowMs - startMs) / 1000
+  const speed = schedule.playbackSpeed && schedule.playbackSpeed > 0 ? schedule.playbackSpeed : 1
 
   // Calculate elapsed progress through the scheduled lecture block (with breaks handled)
-  const breakInfo = calculateScheduleBreakInfo(schedule.durationSeconds, elapsed)
-  const videoOffset = breakInfo.expectedVideoPosition
+  const breakInfo = calculateScheduleBreakInfo(schedule.durationSeconds, elapsed, speed)
+  const videoOffset = breakInfo.expectedVideoPosition * speed
 
   const rangeStart = schedule.rangeStartSeconds ?? 0
   const rangeEnd = schedule.rangeEndSeconds ?? (rangeStart + schedule.durationSeconds)
@@ -244,7 +252,8 @@ export function buildScheduleDisplayInfo(
   const isBlocked = isRecordedAccessBlocked(schedule, reliableNowMs)
   const breakInfo = calculateScheduleBreakInfo(
     schedule.durationSeconds,
-    status === 'live' ? Math.max(0, (reliableNowMs - schedule.startAt.toMillis()) / 1000) : 0
+    status === 'live' ? Math.max(0, (reliableNowMs - schedule.startAt.toMillis()) / 1000) : 0,
+    schedule.playbackSpeed ?? 1
   )
 
   return {

@@ -32,7 +32,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import {
   ChevronLeft, Clock, Radio, AlertTriangle, Play, Pause,
   CheckCircle2, CalendarDays, Volume1, Volume2, VolumeX,
-  Maximize, Minimize, Loader2, Wifi, Coffee, Sparkles, Lock,
+  Maximize, Minimize, Loader2, Wifi, Coffee, Sparkles, Lock, Zap,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSchedule } from '@/hooks/useSchedule'
@@ -80,12 +80,13 @@ interface WaitingRoomProps {
   isCustomRange?: boolean
   rangeStartSeconds?: number
   rangeEndSeconds?: number
+  playbackSpeed?: number
 }
 
 function WaitingRoom({
   title, subjectName, chapterName, startAt, endAt,
   youtubeVideoId, thumbnailUrl, countdownMs, breakInfo,
-  isCustomRange, rangeStartSeconds, rangeEndSeconds,
+  isCustomRange, rangeStartSeconds, rangeEndSeconds, playbackSpeed,
 }: WaitingRoomProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-6">
@@ -138,6 +139,15 @@ function WaitingRoom({
               <span className="font-mono font-semibold">
                 {formatSecondsToTimestampString(rangeEndSeconds ?? 0)}
               </span>
+            </span>
+          </div>
+        )}
+
+        {playbackSpeed && playbackSpeed !== 1 && (
+          <div className="flex items-center gap-2 bg-[#6366F1]/15 border border-[#6366F1]/30 rounded-xl px-3 py-2 text-xs text-[#A5B4FC]">
+            <Sparkles size={13} className="shrink-0 text-[#818CF8]" />
+            <span>
+              লাইভ স্পিড: <span className="font-mono font-bold text-white">{playbackSpeed}x</span> (লাইভ চলাকালীন প্লেয়ার {playbackSpeed}x গতিতে লক থাকবে)
             </span>
           </div>
         )}
@@ -416,8 +426,9 @@ export default function LiveWatchPage() {
               if (isMuted) e.target.mute?.()
             } catch { /* ignore */ }
 
-            // 2. Lock speed at 1x (PRD §11.2)
-            try { e.target.setPlaybackRate?.(1) } catch { /* ignore */ }
+            // 2. Lock speed at scheduled speed (default 1x)
+            const targetSpeed = schedule.playbackSpeed && schedule.playbackSpeed > 0 ? schedule.playbackSpeed : 1
+            try { e.target.setPlaybackRate?.(targetSpeed) } catch { /* ignore */ }
 
             // 3. Seek to expected live position and play
             const expectedPos = calculateExpectedLivePosition(schedule, Date.now())
@@ -463,7 +474,8 @@ export default function LiveWatchPage() {
               showControlsTemporarily()
 
               // Lock speed and force captions off every time playback starts
-              try { playerRef.current?.setPlaybackRate?.(1) } catch { /* ignore */ }
+              const targetSpeed = schedule.playbackSpeed && schedule.playbackSpeed > 0 ? schedule.playbackSpeed : 1
+              try { playerRef.current?.setPlaybackRate?.(targetSpeed) } catch { /* ignore */ }
               forceDisableCaptions()
 
               // Track timing for attendance
@@ -490,8 +502,9 @@ export default function LiveWatchPage() {
           },
 
           onPlaybackRateChange: () => {
-            // Force 1x back if user somehow changed it (PRD §11.2)
-            try { playerRef.current?.setPlaybackRate?.(1) } catch { /* ignore */ }
+            // Force scheduled speed back if user somehow changed it (PRD §11.2)
+            const targetSpeed = schedule.playbackSpeed && schedule.playbackSpeed > 0 ? schedule.playbackSpeed : 1
+            try { playerRef.current?.setPlaybackRate?.(targetSpeed) } catch { /* ignore */ }
           },
 
           onError: () => {
@@ -833,6 +846,7 @@ export default function LiveWatchPage() {
           isCustomRange={schedule.isCustomRange}
           rangeStartSeconds={schedule.rangeStartSeconds}
           rangeEndSeconds={schedule.rangeEndSeconds}
+          playbackSpeed={schedule.playbackSpeed}
         />
       </div>
     )
@@ -959,6 +973,11 @@ export default function LiveWatchPage() {
               {schedule.isCustomRange && (
                 <span className="text-[#38BDF8] ml-1.5 font-mono font-medium">
                   [{formatSecondsToTimestampString(schedule.rangeStartSeconds ?? 0)} – {formatSecondsToTimestampString(schedule.rangeEndSeconds ?? schedule.durationSeconds)}]
+                </span>
+              )}
+              {schedule.playbackSpeed && schedule.playbackSpeed !== 1 && (
+                <span className="text-[#A5B4FC] ml-2 font-mono font-bold bg-[#6366F1]/30 px-1.5 py-0.5 rounded text-[10px] border border-[#6366F1]/40 shadow-sm">
+                  ⚡ {schedule.playbackSpeed}x
                 </span>
               )}
             </p>
@@ -1096,6 +1115,17 @@ export default function LiveWatchPage() {
 
                 {/* Spacer */}
                 <div className="flex-1" />
+
+                {/* Playback speed indicator if not 1x */}
+                {schedule.playbackSpeed && schedule.playbackSpeed !== 1 && (
+                  <span
+                    className="flex items-center gap-1 text-[11px] font-mono font-bold text-[#A5B4FC] bg-[#6366F1]/20 border border-[#6366F1]/30 px-2 py-1 rounded-lg select-none mr-1"
+                    title={`লাইভ ক্লাসের গতি ${schedule.playbackSpeed}x-এ লক করা`}
+                  >
+                    <Zap size={11} className="text-[#818CF8]" />
+                    {schedule.playbackSpeed}x
+                  </span>
+                )}
 
                 {/* Fullscreen */}
                 <button

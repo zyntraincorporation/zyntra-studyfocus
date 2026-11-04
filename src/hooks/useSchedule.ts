@@ -133,7 +133,11 @@ export function useSchedule(
     : 0
 
   const breakInfo: BreakInfo = schedule
-    ? calculateScheduleBreakInfo(schedule.durationSeconds, status === 'live' ? realElapsed : 0)
+    ? calculateScheduleBreakInfo(
+        schedule.durationSeconds,
+        status === 'live' ? realElapsed : 0,
+        schedule.playbackSpeed ?? 1
+      )
     : {
         hasBreaks: false,
         isBreakActive: false,
