@@ -25,6 +25,7 @@ import type { ScheduledClass } from '@/types/schedule.types'
 import {
   deriveScheduleStatus,
   formatScheduleDate,
+  formatScheduleDateWithWeekday,
   formatScheduleTime,
   formatScheduleTimeRange,
   formatCountdown,
@@ -48,32 +49,41 @@ function UpcomingClassCard({
   const isEnded = status === 'ended'
   const isUpcoming = status === 'upcoming'
 
+  const targetRoute = isLive
+    ? buildRoute(ROUTES.LIVE_WATCH, { scheduleId: schedule.id })
+    : isEnded
+    ? buildRoute(ROUTES.WATCH, { lectureId: schedule.lectureId })
+    : buildRoute(ROUTES.LIVE_WATCH, { scheduleId: schedule.id })
+
   return (
     <div
-      className={`relative flex items-center gap-2.5 sm:gap-3 rounded-xl p-2 sm:p-2.5 border transition-all duration-200 overflow-hidden ${
+      className={`group relative flex items-center gap-2.5 sm:gap-3 rounded-xl p-2 sm:p-2.5 border transition-all duration-200 overflow-hidden ${
         isLive
-          ? 'bg-[#0C1A0F] border-[#22C55E]/40 hover:border-[#22C55E]/70'
+          ? 'bg-[#0C1A0F] border-[#22C55E]/40 hover:border-[#22C55E]/70 shadow-[0_0_12px_rgba(34,197,94,0.08)]'
           : isEnded
           ? 'bg-[#111820] border-[#1E2A36] opacity-70'
-          : 'bg-[#111820] border-[#1E2A36] hover:border-[#6366F1]/30'
+          : 'bg-[#111820] border-[#1E2A36] hover:border-[#6366F1]/30 hover:bg-[#131D28]'
       }`}
     >
       {/* Live pulse background */}
       {isLive && (
-        <div className="absolute inset-0 bg-[#22C55E]/3 pointer-events-none rounded-xl" />
+        <div className="absolute inset-0 bg-[#22C55E]/5 pointer-events-none rounded-xl" />
       )}
 
       {/* Thumbnail: Crisp, fixed 16:9 */}
-      <div className="relative shrink-0 w-16 h-11 sm:w-24 sm:h-16 rounded-lg overflow-hidden bg-[#17202A] shadow-sm">
+      <Link
+        to={targetRoute}
+        className="relative shrink-0 w-16 h-11 sm:w-20 sm:h-13 rounded-lg overflow-hidden bg-[#17202A] shadow-sm border border-white/5 block"
+      >
         <img
           src={schedule.thumbnailUrl}
           alt={schedule.title}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
         />
         {/* Status overlay */}
         {isLive && (
-          <div className="absolute top-1 left-1 flex items-center gap-1 bg-[#16A34A] px-1 py-0.2 rounded shadow-sm">
+          <div className="absolute top-0.5 left-0.5 flex items-center gap-1 bg-[#16A34A] px-1 py-0.2 rounded shadow-sm">
             <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
@@ -87,54 +97,58 @@ function UpcomingClassCard({
           </div>
         )}
         {isUpcoming && (
-          <div className="absolute top-1 left-1 flex items-center gap-1 bg-black/70 px-1 py-0.2 rounded">
+          <div className="absolute top-0.5 left-0.5 flex items-center gap-1 bg-black/75 px-1 py-0.2 rounded">
             <Lock size={8} className="text-[#94A3B8]" />
-            <span className="text-[8px] text-[#94A3B8] font-medium">LOCKED</span>
+            <span className="text-[8px] text-[#CBD5E1] font-medium">LOCKED</span>
           </div>
         )}
-      </div>
+      </Link>
 
-      {/* Info: strictly non-breaking, 2 clean lines */}
+      {/* Info: strictly 2 clean compact lines in one row */}
       <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-        <p className="text-xs sm:text-sm font-semibold text-[#F8FAFC] truncate leading-tight">
-          {schedule.title}
-        </p>
+        <Link to={targetRoute} className="block">
+          <p className="text-xs sm:text-sm font-semibold text-[#F8FAFC] truncate leading-tight group-hover:text-[#818CF8] transition-colors">
+            {schedule.title}
+          </p>
+        </Link>
 
-        <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#94A3B8] truncate whitespace-nowrap">
-          <span className="truncate font-medium text-[#CBD5E1]">
-            {schedule.subjectName}
-          </span>
-          <span className="text-[#334155] shrink-0">·</span>
-          <span className="shrink-0 text-[#818CF8] font-mono flex items-center gap-1">
-            <Clock size={11} className="hidden sm:inline text-[#818CF8]" />
-            {formatScheduleTimeRange(schedule.startAt, schedule.endAt)}
-          </span>
-          {schedule.playbackSpeed && schedule.playbackSpeed !== 1 && (
-            <>
-              <span className="text-[#334155] shrink-0">·</span>
-              <span className="shrink-0 text-[9px] font-bold font-mono px-1 py-0.2 rounded bg-[#6366F1]/20 text-[#818CF8] border border-[#6366F1]/30">
-                ⚡{schedule.playbackSpeed}x
+        {isLive ? (
+          <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#4ADE80] font-medium truncate">
+            <span className="flex items-center gap-1 font-semibold text-[#4ADE80]">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4ADE80] opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#4ADE80]" />
               </span>
-            </>
-          )}
-        </div>
-
-        {/* Status / Countdown indicator */}
-        {isLive && (
-          <p className="text-[10px] sm:text-xs font-semibold text-[#4ADE80] truncate">
-            🔴 লাইভ চলছে — এখনই যুক্ত হন
-          </p>
-        )}
-        {isUpcoming && info.countdownMs > 0 && (
-          <p className="text-[10px] sm:text-xs text-[#94A3B8] truncate">
-            <span className="text-[#818CF8] font-mono font-semibold">
-              {formatCountdown(info.countdownMs)}
+              লাইভ চলছে
             </span>
-            {' '}পরে শুরু হবে
-          </p>
-        )}
-        {isEnded && (
-          <p className="text-[10px] sm:text-xs text-[#64748B]">ক্লাস শেষ হয়েছে</p>
+            <span className="text-[#334155]">·</span>
+            <span className="text-[#94A3B8] truncate">{schedule.subjectName}</span>
+          </div>
+        ) : isUpcoming ? (
+          <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#94A3B8] truncate whitespace-nowrap">
+            <span className="truncate font-medium text-[#CBD5E1]">
+              {schedule.subjectName}
+            </span>
+            <span className="text-[#334155] shrink-0">·</span>
+            <span className="shrink-0 text-[#818CF8] font-medium flex items-center gap-1">
+              <CalendarDays size={10} className="hidden sm:inline text-[#818CF8]" />
+              {formatScheduleDateWithWeekday(schedule.startAt)} · {formatScheduleTime(schedule.startAt)}
+            </span>
+            {info.countdownMs > 0 && (
+              <>
+                <span className="text-[#334155] shrink-0">·</span>
+                <span className="shrink-0 text-[#A5B4FC] font-mono font-medium">
+                  {formatCountdown(info.countdownMs)} বাকি
+                </span>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#64748B] truncate">
+            <span className="truncate">{schedule.subjectName}</span>
+            <span>·</span>
+            <span>ক্লাস সমাপ্ত</span>
+          </div>
         )}
       </div>
 
@@ -142,17 +156,18 @@ function UpcomingClassCard({
       <div className="shrink-0 flex items-center">
         {isLive && (
           <Link
-            to={buildRoute(ROUTES.LIVE_WATCH, { scheduleId: schedule.id })}
-            className="flex items-center gap-1 bg-[#16A34A] hover:bg-[#15803D] text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-colors shadow-sm"
+            to={targetRoute}
+            className="flex items-center gap-1 bg-[#16A34A] hover:bg-[#15803D] active:scale-95 text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-all shadow-sm"
           >
             <Radio size={12} className="animate-pulse" />
-            <span>Join Live</span>
+            <span className="hidden sm:inline">Join Live</span>
+            <span className="sm:hidden">Join</span>
           </Link>
         )}
         {isUpcoming && (
           <Link
-            to={buildRoute(ROUTES.LIVE_WATCH, { scheduleId: schedule.id })}
-            className="flex items-center gap-1 bg-[#1E2A36] hover:bg-[#243447] text-[#94A3B8] hover:text-[#F8FAFC] text-[11px] sm:text-xs font-medium px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-colors border border-[#2A3B4D]"
+            to={targetRoute}
+            className="flex items-center gap-1 bg-[#1E2A36] hover:bg-[#243447] active:scale-95 text-[#CBD5E1] hover:text-[#F8FAFC] text-[11px] sm:text-xs font-medium px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-all border border-[#2A3B4D]"
           >
             <Clock size={11} />
             <span className="hidden sm:inline">Waiting Room</span>
@@ -161,8 +176,8 @@ function UpcomingClassCard({
         )}
         {isEnded && (
           <Link
-            to={buildRoute(ROUTES.WATCH, { lectureId: schedule.lectureId })}
-            className="flex items-center gap-1 bg-[#1E2A36] hover:bg-[#243447] text-[#64748B] hover:text-[#F8FAFC] text-[11px] sm:text-xs font-medium px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-colors border border-[#2A3B4D]"
+            to={targetRoute}
+            className="flex items-center gap-1 bg-[#1E2A36] hover:bg-[#243447] active:scale-95 text-[#64748B] hover:text-[#F8FAFC] text-[11px] sm:text-xs font-medium px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-all border border-[#2A3B4D]"
           >
             <Play size={11} />
             <span>Review</span>

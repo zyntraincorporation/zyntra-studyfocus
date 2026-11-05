@@ -5,7 +5,7 @@ import {
   CheckCircle2, Star, Loader2, AlertCircle, CheckCircle,
   Clock, Paperclip, ExternalLink, GripVertical, FileText,
   Code2, Eye, Check, BookOpen, GraduationCap, ChevronDown,
-  Lock, Upload,
+  Lock, Upload, FolderOpen,
 } from 'lucide-react'
 import {
   getSubject,

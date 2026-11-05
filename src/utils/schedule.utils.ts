@@ -310,6 +310,25 @@ export function formatScheduleDate(ts: Timestamp): string {
 }
 
 /**
+ * Formats a Firestore Timestamp into a Bengali date string with weekday (বার).
+ * E.g. "শুক্রবার, ৬ নভেম্বর" or with year "শুক্রবার, ৬ নভেম্বর, ২০২৬"
+ */
+export function formatScheduleDateWithWeekday(ts: Timestamp, includeYear: boolean = false): string {
+  const date = ts.toDate()
+  const weekday = date.toLocaleDateString('bn-BD', {
+    timeZone: DHAKA_TZ,
+    weekday: 'long',
+  })
+  const dateStr = date.toLocaleDateString('bn-BD', {
+    timeZone: DHAKA_TZ,
+    day: 'numeric',
+    month: 'long',
+    ...(includeYear ? { year: 'numeric' } : {}),
+  })
+  return `${weekday}, ${dateStr}`
+}
+
+/**
  * Formats a Firestore Timestamp for time display in Asia/Dhaka timezone.
  * Returns "6:00 PM" style string.
  */

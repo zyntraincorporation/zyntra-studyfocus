@@ -9,7 +9,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   Plus, Radio, CalendarDays, Clock, Play,
-  CheckCircle2, RefreshCw, History,
+  CheckCircle2, RefreshCw, History, Lock,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getLockedSchedules, getEndedSchedules } from '@/services/schedule.service'
@@ -49,111 +49,162 @@ function ScheduleCard({
     ? Math.round(schedule.durationSeconds / schedule.playbackSpeed)
     : schedule.durationSeconds
 
+  const targetRoute = isLive
+    ? buildRoute(ROUTES.LIVE_WATCH, { scheduleId: schedule.id })
+    : isEnded
+    ? buildRoute(ROUTES.WATCH, { lectureId: schedule.lectureId })
+    : buildRoute(ROUTES.LIVE_WATCH, { scheduleId: schedule.id })
+
   return (
     <div
-      className={`group relative flex items-center gap-2.5 sm:gap-3.5 rounded-xl p-2 sm:p-2.5 border transition-all duration-200 ${
+      className={`group relative rounded-2xl p-3 sm:p-4 border transition-all duration-200 ${
         isLive
-          ? 'bg-gradient-to-r from-[#0C1A0F] to-[#0B1610] border-[#22C55E]/60 shadow-[0_0_0_1px_rgba(34,197,94,0.1),0_2px_12px_rgba(34,197,94,0.08)]'
+          ? 'bg-gradient-to-r from-[#0C1A0F] to-[#0B1610] border-[#22C55E]/60 shadow-[0_0_0_1px_rgba(34,197,94,0.1),0_4px_20px_rgba(34,197,94,0.1)]'
           : isEnded
-          ? 'bg-[#0D1117] border-[#1E2A36]/80 opacity-70'
+          ? 'bg-[#0D1117] border-[#1E2A36]/80 opacity-75'
           : 'bg-[#111820] border-[#1E2A36] hover:border-[#6366F1]/40 hover:bg-[#131D28]'
       }`}
     >
       {/* Left accent bar for live */}
       {isLive && (
-        <div className="absolute left-0 top-2 bottom-2 w-1 rounded-full bg-[#22C55E]" />
+        <div className="absolute left-0 top-3 bottom-3 w-1.5 rounded-r-full bg-[#22C55E]" />
       )}
 
-      {/* Thumbnail (Crisp 16:9, strictly sized so it never breaks layout) */}
-      <div className="relative shrink-0 w-16 h-11 sm:w-28 sm:h-18 rounded-lg overflow-hidden bg-[#17202A] shadow-sm">
-        <img
-          src={schedule.thumbnailUrl}
-          alt={schedule.title}
-          className={`w-full h-full object-cover transition-all ${
-            isEnded ? 'grayscale-[30%]' : ''
-          }`}
-          loading="lazy"
-        />
-        {/* Status overlay on thumbnail */}
-        {isLive && (
-          <div className="absolute top-1 left-1 flex items-center gap-1 bg-[#16A34A] px-1 py-0.2 rounded shadow-sm">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
-            </span>
-            <span className="text-[8px] font-bold text-white tracking-wide">LIVE</span>
-          </div>
-        )}
-        {isEnded && (
-          <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
-            <CheckCircle2 size={16} className="text-[#4ADE80]" />
-          </div>
-        )}
-      </div>
+      {/* Main Container: responsive layout */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        {/* Top/Left: Thumbnail & Info */}
+        <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+          {/* Thumbnail */}
+          <Link
+            to={targetRoute}
+            className="relative shrink-0 w-24 h-16 sm:w-32 sm:h-20 rounded-xl overflow-hidden bg-[#17202A] shadow-md border border-white/5 block group-hover:opacity-95"
+          >
+            <img
+              src={schedule.thumbnailUrl}
+              alt={schedule.title}
+              className={`w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 ${
+                isEnded ? 'grayscale-[25%]' : ''
+              }`}
+              loading="lazy"
+            />
+            {/* Overlay status badge */}
+            {isLive && (
+              <div className="absolute top-1 left-1 flex items-center gap-1 bg-[#16A34A] px-1.5 py-0.5 rounded shadow-sm">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+                </span>
+                <span className="text-[9px] font-bold text-white tracking-wide">LIVE</span>
+              </div>
+            )}
+            {isEnded && (
+              <div className="absolute inset-0 bg-black/45 rounded-xl flex items-center justify-center">
+                <CheckCircle2 size={18} className="text-[#4ADE80]" />
+              </div>
+            )}
+            {isUpcoming && (
+              <div className="absolute top-1 left-1 flex items-center gap-1 bg-black/75 backdrop-blur-xs px-1.5 py-0.5 rounded">
+                <Lock size={9} className="text-[#94A3B8]" />
+                <span className="text-[9px] text-[#CBD5E1] font-medium">LOCKED</span>
+              </div>
+            )}
+          </Link>
 
-      {/* Info: Strictly 2 lines with truncate — never breaks onto multiple rows */}
-      <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-        <p className="text-xs sm:text-sm font-bold text-[#F8FAFC] truncate leading-tight">
-          {schedule.title}
-        </p>
+          {/* Details */}
+          <div className="flex-1 min-w-0 space-y-1">
+            <Link to={targetRoute} className="block">
+              <p className="text-sm sm:text-base font-bold text-[#F8FAFC] line-clamp-2 leading-snug group-hover:text-[#818CF8] transition-colors">
+                {schedule.title}
+              </p>
+            </Link>
 
-        <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#94A3B8] truncate whitespace-nowrap">
-          <span className="truncate font-medium text-[#CBD5E1]">
-            {schedule.subjectName}
-          </span>
-          <span className="text-[#334155] shrink-0">·</span>
-          <span className="shrink-0 text-[#818CF8] font-mono flex items-center gap-1">
-            <Clock size={11} className="hidden sm:inline text-[#818CF8]" />
-            {formatScheduleTimeRange(schedule.startAt, schedule.endAt)}
-          </span>
-          <span className="text-[#334155] shrink-0">·</span>
-          <span className="shrink-0 font-mono text-[#64748B]">
-            {formatLiveDuration(effectiveDuration)}
-          </span>
-          {schedule.playbackSpeed && schedule.playbackSpeed !== 1 && (
-            <span className="shrink-0 text-[9px] font-bold font-mono px-1 py-0.2 rounded bg-[#6366F1]/20 text-[#818CF8] border border-[#6366F1]/30">
-              ⚡{schedule.playbackSpeed}x
-            </span>
-          )}
+            <p className="text-xs text-[#94A3B8] truncate">
+              <span className="font-medium text-[#CBD5E1]">{schedule.subjectName}</span>
+              {schedule.chapterName && (
+                <>
+                  <span className="text-[#475569] mx-1">·</span>
+                  <span>{schedule.chapterName}</span>
+                </>
+              )}
+            </p>
+
+            {/* Time range & duration */}
+            <div className="flex items-center gap-1.5 text-xs text-[#64748B] flex-wrap pt-0.5">
+              <span className="flex items-center gap-1 text-[#818CF8] font-mono">
+                <Clock size={11} className="text-[#818CF8] shrink-0" />
+                {formatScheduleTimeRange(schedule.startAt, schedule.endAt)}
+              </span>
+              <span className="text-[#334155]">·</span>
+              <span className="font-mono text-[#94A3B8]">
+                {formatLiveDuration(effectiveDuration)}
+              </span>
+              {schedule.playbackSpeed && schedule.playbackSpeed !== 1 && (
+                <>
+                  <span className="text-[#334155]">·</span>
+                  <span className="text-[10px] font-bold font-mono px-1.5 py-0.2 rounded bg-[#6366F1]/15 text-[#818CF8] border border-[#6366F1]/25">
+                    ⚡{schedule.playbackSpeed}x
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Action Button & Countdown (Clean, strictly horizontal) */}
-      <div className="shrink-0 flex items-center gap-1.5 sm:gap-2">
-        {isUpcoming && countdown > 0 && (
-          <span className="hidden md:inline-flex text-[11px] font-mono font-bold text-[#818CF8] bg-[#6366F1]/10 px-2 py-0.5 rounded-md border border-[#6366F1]/20">
-            {formatCountdown(countdown)}
-          </span>
-        )}
+        {/* Action & Countdown Section */}
+        <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-2.5 sm:pt-0 border-t border-[#1E2A36]/70 sm:border-t-0 shrink-0">
+          {/* Countdown / Status Pill */}
+          {isUpcoming && countdown > 0 && (
+            <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-[#818CF8] bg-[#6366F1]/10 px-2.5 py-1 rounded-lg border border-[#6366F1]/20">
+              <Clock size={12} className="text-[#818CF8]" />
+              <span>{formatCountdown(countdown)} বাকি</span>
+            </div>
+          )}
 
-        {isLive && (
-          <Link
-            to={buildRoute(ROUTES.LIVE_WATCH, { scheduleId: schedule.id })}
-            className="flex items-center gap-1 bg-[#16A34A] hover:bg-[#15803D] active:bg-[#166534] text-white text-[11px] sm:text-xs font-bold px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg transition-colors shadow-sm"
-          >
-            <Radio size={12} className="animate-pulse" />
-            <span>Join Live</span>
-          </Link>
-        )}
-        {isUpcoming && (
-          <Link
-            to={buildRoute(ROUTES.LIVE_WATCH, { scheduleId: schedule.id })}
-            className="flex items-center gap-1 text-[#94A3B8] hover:text-[#F8FAFC] text-[11px] sm:text-xs font-semibold px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-colors border border-[#1E2A36] hover:border-[#334155] hover:bg-[#111820]"
-          >
-            <Clock size={11} />
-            <span className="hidden sm:inline">Waiting Room</span>
-            <span className="sm:hidden">Wait</span>
-          </Link>
-        )}
-        {isEnded && (
-          <Link
-            to={buildRoute(ROUTES.WATCH, { lectureId: schedule.lectureId })}
-            className="flex items-center gap-1 text-[#818CF8] hover:text-[#A5B4FC] text-[11px] sm:text-xs font-semibold px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-colors border border-[#6366F1]/20 hover:border-[#6366F1]/50 bg-[#6366F1]/8 hover:bg-[#6366F1]/15"
-          >
-            <Play size={11} />
-            <span>Review</span>
-          </Link>
-        )}
+          {isLive && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-[#4ADE80] sm:hidden">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4ADE80] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4ADE80]" />
+              </span>
+              <span>লাইভ চলছে</span>
+            </div>
+          )}
+
+          {isEnded && (
+            <span className="text-xs text-[#64748B] sm:hidden">ক্লাস সমাপ্ত</span>
+          )}
+
+          {/* Action button */}
+          <div className="shrink-0">
+            {isLive && (
+              <Link
+                to={targetRoute}
+                className="flex items-center gap-1.5 bg-[#16A34A] hover:bg-[#15803D] active:scale-95 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-md shadow-[#16A34A]/20"
+              >
+                <Radio size={13} className="animate-pulse" />
+                <span>Join Live</span>
+              </Link>
+            )}
+            {isUpcoming && (
+              <Link
+                to={targetRoute}
+                className="flex items-center gap-1.5 bg-[#1E2A36] hover:bg-[#2A3B4D] active:scale-95 text-[#CBD5E1] hover:text-[#F8FAFC] text-xs font-semibold px-3.5 py-2 rounded-xl transition-all border border-[#2A3B4D] hover:border-[#3B4F66]"
+              >
+                <Clock size={12} />
+                <span>Waiting Room</span>
+              </Link>
+            )}
+            {isEnded && (
+              <Link
+                to={targetRoute}
+                className="flex items-center gap-1.5 bg-[#6366F1]/10 hover:bg-[#6366F1]/20 active:scale-95 text-[#818CF8] hover:text-[#A5B4FC] text-xs font-semibold px-3.5 py-2 rounded-xl transition-all border border-[#6366F1]/25 hover:border-[#6366F1]/50"
+              >
+                <Play size={12} />
+                <span>Review</span>
+              </Link>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -172,16 +223,16 @@ function DateSection({
   reliableNowMs: number
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <div className="flex items-center gap-2 py-1">
-        {icon && <span className="text-[#475569]">{icon}</span>}
-        <span className="text-xs font-bold text-[#64748B] uppercase tracking-widest">
+        {icon && <span className="text-[#818CF8]">{icon}</span>}
+        <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">
           {title}
         </span>
         <div className="flex-1 h-px bg-[#1E2A36]" />
-        <span className="text-[11px] text-[#334155]">{schedules.length}টি ক্লাস</span>
+        <span className="text-[11px] text-[#64748B] font-mono">{schedules.length}টি ক্লাস</span>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {schedules.map((s) => (
           <ScheduleCard key={s.id} schedule={s} reliableNowMs={reliableNowMs} />
         ))}
@@ -296,13 +347,13 @@ export default function SchedulePage() {
         {([
           {
             id: 'upcoming' as Tab,
-            label: 'আসন্ন',
+            label: 'আসন্ন রুটিন',
             count: upcomingSchedules.length,
             icon: CalendarDays,
           },
           {
             id: 'history' as Tab,
-            label: 'সম্পন্ন',
+            label: 'সম্পন্ন ক্লাস',
             count: endedSchedules.length,
             icon: History,
           },
@@ -351,24 +402,24 @@ export default function SchedulePage() {
             <>
               {todayClasses.length > 0 && (
                 <DateSection
-                  title="আজ"
-                  icon={<Radio size={12} />}
+                  title="আজকের রুটিন"
+                  icon={<Radio size={13} className="text-[#22C55E]" />}
                   schedules={todayClasses}
                   reliableNowMs={reliableNowMs}
                 />
               )}
               {tomorrowClasses.length > 0 && (
                 <DateSection
-                  title="আগামীকাল"
-                  icon={<CalendarDays size={12} />}
+                  title="আগামীকালের রুটিন"
+                  icon={<CalendarDays size={13} className="text-[#818CF8]" />}
                   schedules={tomorrowClasses}
                   reliableNowMs={reliableNowMs}
                 />
               )}
               {laterClasses.length > 0 && (
                 <DateSection
-                  title="পরবর্তী"
-                  icon={<Clock size={12} />}
+                  title="পরবর্তী দিনসমূহ"
+                  icon={<Clock size={13} className="text-[#F59E0B]" />}
                   schedules={laterClasses}
                   reliableNowMs={reliableNowMs}
                 />

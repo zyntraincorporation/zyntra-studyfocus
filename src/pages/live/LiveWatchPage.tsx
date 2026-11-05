@@ -33,6 +33,7 @@ import {
   ChevronLeft, Clock, Radio, AlertTriangle, Play, Pause,
   CheckCircle2, CalendarDays, Volume1, Volume2, VolumeX,
   Maximize, Minimize, Loader2, Wifi, Coffee, Sparkles, Lock, Zap,
+  Hourglass,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSchedule } from '@/hooks/useSchedule'
@@ -45,13 +46,15 @@ import { buildRoute, ROUTES } from '@/constants/routes'
 import { getThumbnailUrl } from '@/utils/youtube.utils'
 import {
   formatScheduleDate,
+  formatScheduleDateWithWeekday,
   formatScheduleTime,
   formatScheduleTimeRange,
   formatCountdown,
   calculateExpectedLivePosition,
   formatSecondsToTimestampString,
+  formatLiveDuration,
 } from '@/utils/schedule.utils'
-import { formatDuration } from '@/utils/time.utils'
+import { formatDuration, formatDurationHuman } from '@/utils/time.utils'
 import { ATTENDANCE_SAVE_INTERVAL_MS } from '@/constants/firebase'
 import type { Timestamp } from 'firebase/firestore'
 
@@ -76,6 +79,8 @@ interface WaitingRoomProps {
   youtubeVideoId: string
   thumbnailUrl?: string
   countdownMs: number
+  durationSeconds?: number
+  durationFormatted?: string
   breakInfo?: import('@/types/schedule.types').BreakInfo
   isCustomRange?: boolean
   rangeStartSeconds?: number
@@ -87,47 +92,153 @@ function WaitingRoom({
   title, subjectName, chapterName, startAt, endAt,
   youtubeVideoId, thumbnailUrl, countdownMs, breakInfo,
   isCustomRange, rangeStartSeconds, rangeEndSeconds, playbackSpeed,
+  durationSeconds, durationFormatted,
 }: WaitingRoomProps) {
+  const totalSeconds = Math.max(0, Math.floor(countdownMs / 1000))
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  const effectiveDuration = durationSeconds
+    ? (playbackSpeed && playbackSpeed !== 1
+        ? Math.round(durationSeconds / playbackSpeed)
+        : durationSeconds)
+    : 0
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-6">
+    <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 text-center space-y-6">
       {/* Thumbnail with countdown overlay */}
-      <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl">
+      <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl border border-white/5">
         <img
           src={thumbnailUrl || getThumbnailUrl(youtubeVideoId, 'high')}
           alt={title}
-          className="w-full object-cover"
+          className="w-full object-cover aspect-video"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent" />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="bg-black/70 px-5 py-3 rounded-2xl text-center">
-            <p className="text-[#F59E0B] font-bold text-sm flex items-center gap-2 justify-center">
-              <Clock size={14} />
-              ক্লাস শুরু হতে বাকি
+          <div className="bg-black/75 backdrop-blur-xs px-5 py-2.5 rounded-2xl border border-white/10 text-center shadow-lg">
+            <p className="text-[#F59E0B] font-bold text-xs sm:text-sm flex items-center gap-2 justify-center">
+              <Clock size={15} />
+              লাইভ ক্লাস শুরু হতে বাকি
             </p>
           </div>
         </div>
       </div>
 
-      {/* Countdown timer */}
-      <div className="space-y-2">
-        <p className="text-5xl font-black text-[#F8FAFC] font-mono tracking-tight tabular-nums">
-          {formatCountdown(countdownMs)}
-        </p>
-        <p className="text-sm text-[#64748B]">
-          {formatScheduleDate(startAt)} — {formatScheduleTime(startAt)}
-        </p>
-        <p className="text-xs text-[#475569] max-w-xs mx-auto bg-[#0D1117] border border-[#1E2A36] rounded-xl px-4 py-2 mt-2">
-          নির্ধারিত সময় পর্যন্ত এই Waiting Room-এ থাকুন।<br />
-          সময় হলে Live Player স্বয়ংক্রিয়ভাবে শুরু হবে।
+      {/* ── Countdown timer (d, h, min, sec) ── */}
+      <div className="space-y-3 w-full max-w-lg">
+        {/* 4 Digital Metric Cards */}
+        <div className="grid grid-cols-4 gap-2 sm:gap-3.5 max-w-md mx-auto">
+          <div className="bg-[#111820] border border-[#1E2A36] rounded-2xl p-2.5 sm:p-3 text-center shadow-sm">
+            <span className="text-2xl sm:text-4xl font-black font-mono text-[#F8FAFC] tabular-nums block">
+              {days}
+            </span>
+            <span className="text-[10px] sm:text-xs text-[#818CF8] font-bold uppercase tracking-wider block mt-0.5">
+              {days}d (দিন)
+            </span>
+          </div>
+
+          <div className="bg-[#111820] border border-[#1E2A36] rounded-2xl p-2.5 sm:p-3 text-center shadow-sm">
+            <span className="text-2xl sm:text-4xl font-black font-mono text-[#F8FAFC] tabular-nums block">
+              {String(hours).padStart(2, '0')}
+            </span>
+            <span className="text-[10px] sm:text-xs text-[#818CF8] font-bold uppercase tracking-wider block mt-0.5">
+              {hours}h (ঘণ্টা)
+            </span>
+          </div>
+
+          <div className="bg-[#111820] border border-[#1E2A36] rounded-2xl p-2.5 sm:p-3 text-center shadow-sm">
+            <span className="text-2xl sm:text-4xl font-black font-mono text-[#F8FAFC] tabular-nums block">
+              {String(minutes).padStart(2, '0')}
+            </span>
+            <span className="text-[10px] sm:text-xs text-[#818CF8] font-bold uppercase tracking-wider block mt-0.5">
+              {minutes}m (মিনিট)
+            </span>
+          </div>
+
+          <div className="bg-[#0C1A0F] border border-[#22C55E]/40 rounded-2xl p-2.5 sm:p-3 text-center shadow-sm">
+            <span className="text-2xl sm:text-4xl font-black font-mono text-[#4ADE80] tabular-nums block">
+              {String(seconds).padStart(2, '0')}
+            </span>
+            <span className="text-[10px] sm:text-xs text-[#4ADE80] font-bold uppercase tracking-wider block mt-0.5">
+              {seconds}s (সেকেন্ড)
+            </span>
+          </div>
+        </div>
+
+        <p className="text-xs sm:text-sm text-[#94A3B8] font-medium pt-0.5">
+          {formatScheduleDateWithWeekday(startAt, true)} — {formatScheduleTime(startAt)}
         </p>
       </div>
 
-      {/* Class info card */}
-      <div className="bg-[#111820] border border-[#1E2A36] rounded-2xl p-4 text-left w-full max-w-lg space-y-3">
-        <p className="text-xs font-semibold text-[#64748B] uppercase tracking-widest">ক্লাস তথ্য</p>
-        <p className="text-sm font-bold text-[#F8FAFC]">{title}</p>
-        <p className="text-xs text-[#64748B]">{subjectName} · {chapterName}</p>
+      {/* ── Class Info Card (All details including Duration) ── */}
+      <div className="bg-[#111820] border border-[#1E2A36] rounded-2xl p-4 sm:p-5 text-left w-full max-w-lg space-y-3.5 shadow-sm">
+        <div className="flex items-center justify-between border-b border-[#1E2A36] pb-2.5">
+          <p className="text-xs font-bold text-[#94A3B8] uppercase tracking-widest flex items-center gap-1.5">
+            <Clock size={13} className="text-[#818CF8]" />
+            ক্লাসের বিস্তারিত তথ্য
+          </p>
+          <span className="text-[10px] sm:text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#6366F1]/10 text-[#818CF8] border border-[#6366F1]/20 font-bold">
+            আসন্ন শিডিউল
+          </span>
+        </div>
 
+        <div>
+          <p className="text-sm sm:text-base font-bold text-[#F8FAFC] leading-snug">{title}</p>
+          <p className="text-xs text-[#94A3B8] mt-1">
+            <span className="text-[#CBD5E1] font-medium">{subjectName}</span>
+            {chapterName && <span className="text-[#64748B]"> · {chapterName}</span>}
+          </p>
+        </div>
+
+        {/* Metadata Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+          {/* Day & Date */}
+          <div className="flex items-center gap-2.5 bg-[#0B0F14] border border-[#1E2A36] rounded-xl p-2.5 text-xs">
+            <CalendarDays size={15} className="text-[#818CF8] shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[10px] text-[#64748B] block uppercase tracking-wide">তারিখ ও বার</span>
+              <span className="font-medium text-[#F8FAFC] truncate block">{formatScheduleDateWithWeekday(startAt, true)}</span>
+            </div>
+          </div>
+
+          {/* Time range */}
+          <div className="flex items-center gap-2.5 bg-[#0B0F14] border border-[#1E2A36] rounded-xl p-2.5 text-xs">
+            <Clock size={15} className="text-[#818CF8] shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[10px] text-[#64748B] block uppercase tracking-wide">সময়সূচি</span>
+              <span className="font-mono text-[#F8FAFC] truncate block">{formatScheduleTimeRange(startAt, endAt)}</span>
+            </div>
+          </div>
+
+          {/* Duration */}
+          <div className="flex items-center gap-2.5 bg-[#0B0F14] border border-[#1E2A36] rounded-xl p-2.5 text-xs">
+            <Hourglass size={15} className="text-[#F59E0B] shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[10px] text-[#64748B] block uppercase tracking-wide">মোট ক্লাসের ব্যাপ্তি (Duration)</span>
+              <span className="font-mono font-bold text-[#F8FAFC] truncate block">
+                {effectiveDuration > 0 ? formatDurationHuman(effectiveDuration) : (durationFormatted || 'নির্ধারিত')}
+                {effectiveDuration > 0 && (
+                  <span className="text-[#64748B] font-normal ml-1">({formatLiveDuration(effectiveDuration)})</span>
+                )}
+              </span>
+            </div>
+          </div>
+
+          {/* Playback speed */}
+          <div className="flex items-center gap-2.5 bg-[#0B0F14] border border-[#1E2A36] rounded-xl p-2.5 text-xs">
+            <Zap size={15} className="text-[#22C55E] shrink-0" />
+            <div className="min-w-0">
+              <span className="text-[10px] text-[#64748B] block uppercase tracking-wide">লাইভ স্পিড</span>
+              <span className="font-mono font-bold text-[#F8FAFC] truncate block">
+                {playbackSpeed && playbackSpeed !== 1 ? `${playbackSpeed}x স্পিড লক` : '1.0x (স্বাভাবিক)'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Custom Range */}
         {isCustomRange && (
           <div className="flex items-center gap-2 bg-[#6366F1]/10 border border-[#6366F1]/25 rounded-xl px-3 py-2 text-xs text-[#818CF8]">
             <span>
@@ -143,30 +254,10 @@ function WaitingRoom({
           </div>
         )}
 
-        {playbackSpeed && playbackSpeed !== 1 && (
-          <div className="flex items-center gap-2 bg-[#6366F1]/15 border border-[#6366F1]/30 rounded-xl px-3 py-2 text-xs text-[#A5B4FC]">
-            <Sparkles size={13} className="shrink-0 text-[#818CF8]" />
-            <span>
-              লাইভ স্পিড: <span className="font-mono font-bold text-white">{playbackSpeed}x</span> (লাইভ চলাকালীন প্লেয়ার {playbackSpeed}x গতিতে লক থাকবে)
-            </span>
-          </div>
-        )}
-
-        <div className="flex gap-4 text-xs text-[#475569] pt-1 flex-wrap">
-          <span className="flex items-center gap-1">
-            <CalendarDays size={10} />
-            {formatScheduleDate(startAt)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Clock size={10} />
-            {formatScheduleTimeRange(startAt, endAt)}
-          </span>
-        </div>
-
         {/* Break info callout for long classes */}
         {breakInfo?.hasBreaks && (
-          <div className="flex items-center gap-2 bg-[#F59E0B]/10 border border-[#F59E0B]/25 rounded-xl px-3 py-2 text-xs text-[#FBBF24]">
-            <Coffee size={13} className="shrink-0 text-[#F59E0B]" />
+          <div className="flex items-center gap-2 bg-[#F59E0B]/10 border border-[#F59E0B]/25 rounded-xl px-3 py-2.5 text-xs text-[#FBBF24]">
+            <Coffee size={14} className="shrink-0 text-[#F59E0B]" />
             <span>প্রতি ১ ঘণ্টা পর ১০ মিনিটের বিরতি কার্যকর হবে ({breakInfo.totalBreaks}টি বিরতি)</span>
           </div>
         )}
@@ -847,6 +938,8 @@ export default function LiveWatchPage() {
           rangeStartSeconds={schedule.rangeStartSeconds}
           rangeEndSeconds={schedule.rangeEndSeconds}
           playbackSpeed={schedule.playbackSpeed}
+          durationSeconds={schedule.durationSeconds}
+          durationFormatted={schedule.durationFormatted}
         />
       </div>
     )
