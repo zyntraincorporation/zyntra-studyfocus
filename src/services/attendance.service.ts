@@ -19,13 +19,14 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { USERS_COL, SUB } from '@/constants/firebase'
-import type { AttendanceRecord, AttendanceUpdateInput } from '@/types/schedule.types'
+import type { AttendanceRecord, AttendanceUpdateInput, ScheduleAttendanceSummary } from '@/types/schedule.types'
 import { getScheduleDateKey } from '@/utils/schedule.utils'
 import { upsertActiveSession } from './sessions.service'
 
@@ -199,5 +200,107 @@ export async function finaliseAttendance(
       console.warn('[attendance.service] Failed to upsert study session:', err)
     })
   }
+}
+
+// ── Batch Attendance Query for Ended Schedules ─────────────────────────
+
+/**
+ * Fetches attendance records for multiple schedules of a user.
+ * Sums playback across sessions if the user joined multiple times.
+ * Classifies into 'complete' (>=80%), 'partial' (<80% and >10s), or 'not_attended'.
+ * Accurately calculates attendance percentage against true scheduled class duration
+ * (accounting for playbackSpeed and startAt/endAt).
+ */
+export async function getAttendanceForSchedules(
+  userId: string,
+  schedules: Array<{
+    id: string
+    durationSeconds: number
+    playbackSpeed?: number
+    startAt?: Timestamp
+    endAt?: Timestamp
+  }>
+): Promise<Record<string, ScheduleAttendanceSummary>> {
+  const result: Record<string, ScheduleAttendanceSummary> = {}
+  if (!userId || schedules.length === 0) return result
+
+  try {
+    const fetchPromises = schedules.map(async (s) => {
+      // True scheduled duration of the class in wall-clock seconds
+      const classDurationSec = s.endAt && s.startAt
+        ? Math.max(1, Math.round((s.endAt.toMillis() - s.startAt.toMillis()) / 1000))
+        : s.playbackSpeed && s.playbackSpeed > 0
+        ? Math.max(1, Math.round(s.durationSeconds / s.playbackSpeed))
+        : Math.max(1, s.durationSeconds)
+
+      try {
+        const attendanceColRef = collection(
+          db,
+          USERS_COL,
+          userId,
+          SUB.SCHEDULED_CLASSES,
+          s.id,
+          SUB.ATTENDANCE
+        )
+        const snap = await getDocs(attendanceColRef)
+        if (snap.empty) {
+          result[s.id] = {
+            scheduleId: s.id,
+            totalPlaybackSeconds: 0,
+            scheduledDurationSeconds: classDurationSec,
+            attendancePercentage: 0,
+            status: 'not_attended',
+          }
+          return
+        }
+
+        let totalActive = 0
+        snap.forEach((docSnap) => {
+          const data = docSnap.data() as Partial<AttendanceRecord>
+          const active = data.totalActivePlaybackSeconds ?? 0
+          totalActive += active
+        })
+
+        // Compute percentage directly from genuine active playback vs real class duration
+        const computedPercentage = Math.min(
+          100,
+          Math.max(0, Math.round((totalActive / classDurationSec) * 100))
+        )
+
+        // Threshold: >= 80% is Complete
+        let status: 'complete' | 'partial' | 'not_attended' = 'not_attended'
+        if (computedPercentage >= 80) {
+          status = 'complete'
+        } else if (computedPercentage > 0 && totalActive >= 15) {
+          status = 'partial'
+        } else {
+          status = 'not_attended'
+        }
+
+        result[s.id] = {
+          scheduleId: s.id,
+          totalPlaybackSeconds: totalActive,
+          scheduledDurationSeconds: classDurationSec,
+          attendancePercentage: computedPercentage,
+          status,
+        }
+      } catch (err) {
+        console.warn(`[attendance.service] Failed to fetch attendance for schedule ${s.id}:`, err)
+        result[s.id] = {
+          scheduleId: s.id,
+          totalPlaybackSeconds: 0,
+          scheduledDurationSeconds: classDurationSec,
+          attendancePercentage: 0,
+          status: 'not_attended',
+        }
+      }
+    })
+
+    await Promise.all(fetchPromises)
+  } catch (err) {
+    console.warn('[attendance.service] getAttendanceForSchedules error:', err)
+  }
+
+  return result
 }
 

@@ -157,29 +157,27 @@ function UpcomingClassCard({
         {isLive && (
           <Link
             to={targetRoute}
-            className="flex items-center gap-1 bg-[#16A34A] hover:bg-[#15803D] active:scale-95 text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-all shadow-sm"
+            className="flex items-center gap-1 bg-[#16A34A] hover:bg-[#15803D] active:scale-95 text-white text-[10px] sm:text-xs font-semibold px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg transition-all shadow-sm shrink-0 whitespace-nowrap"
           >
-            <Radio size={12} className="animate-pulse" />
-            <span className="hidden sm:inline">Join Live</span>
-            <span className="sm:hidden">Join</span>
+            <Radio size={12} className="animate-pulse shrink-0" />
+            <span>Join Live</span>
           </Link>
         )}
         {isUpcoming && (
           <Link
             to={targetRoute}
-            className="flex items-center gap-1 bg-[#1E2A36] hover:bg-[#243447] active:scale-95 text-[#CBD5E1] hover:text-[#F8FAFC] text-[11px] sm:text-xs font-medium px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-all border border-[#2A3B4D]"
+            className="flex items-center gap-1 bg-[#1E2A36] hover:bg-[#243447] active:scale-95 text-[#CBD5E1] hover:text-[#F8FAFC] text-[10px] sm:text-xs font-medium px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg transition-all border border-[#2A3B4D] shrink-0 whitespace-nowrap"
           >
-            <Clock size={11} />
-            <span className="hidden sm:inline">Waiting Room</span>
-            <span className="sm:hidden">Wait</span>
+            <Clock size={11} className="shrink-0 text-[#818CF8]" />
+            <span>Waiting Room</span>
           </Link>
         )}
         {isEnded && (
           <Link
             to={targetRoute}
-            className="flex items-center gap-1 bg-[#1E2A36] hover:bg-[#243447] active:scale-95 text-[#64748B] hover:text-[#F8FAFC] text-[11px] sm:text-xs font-medium px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg transition-all border border-[#2A3B4D]"
+            className="flex items-center gap-1 bg-[#1E2A36] hover:bg-[#243447] active:scale-95 text-[#64748B] hover:text-[#F8FAFC] text-[10px] sm:text-xs font-medium px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg transition-all border border-[#2A3B4D] shrink-0 whitespace-nowrap"
           >
-            <Play size={11} />
+            <Play size={11} className="shrink-0 text-[#818CF8]" />
             <span>Review</span>
           </Link>
         )}

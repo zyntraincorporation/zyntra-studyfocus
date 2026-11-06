@@ -175,6 +175,15 @@ export interface AttendanceRecord {
 // ── Attendance Upsert Input ────────────────────────────────────────────
 export type AttendanceUpdateInput = Partial<Omit<AttendanceRecord, 'id' | 'scheduleId' | 'lectureId' | 'sessionInstanceId' | 'createdAt'>>
 
+// ── Schedule Attendance Summary (History Page Badge) ───────────────────
+export interface ScheduleAttendanceSummary {
+  scheduleId: string
+  totalPlaybackSeconds: number
+  scheduledDurationSeconds: number
+  attendancePercentage: number
+  status: 'complete' | 'partial' | 'not_attended'
+}
+
 // ── Schedule Conflict Check ────────────────────────────────────────────
 // Used during validation before locking to ensure no overlapping schedules
 export interface ScheduleConflict {

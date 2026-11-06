@@ -134,8 +134,8 @@ function WaitingRoom({
             <span className="text-2xl sm:text-4xl font-black font-mono text-[#F8FAFC] tabular-nums block">
               {days}
             </span>
-            <span className="text-[10px] sm:text-xs text-[#818CF8] font-bold uppercase tracking-wider block mt-0.5">
-              {days}d (দিন)
+            <span className="text-[10px] sm:text-xs text-[#818CF8] font-semibold block mt-1">
+              দিন
             </span>
           </div>
 
@@ -143,8 +143,8 @@ function WaitingRoom({
             <span className="text-2xl sm:text-4xl font-black font-mono text-[#F8FAFC] tabular-nums block">
               {String(hours).padStart(2, '0')}
             </span>
-            <span className="text-[10px] sm:text-xs text-[#818CF8] font-bold uppercase tracking-wider block mt-0.5">
-              {hours}h (ঘণ্টা)
+            <span className="text-[10px] sm:text-xs text-[#818CF8] font-semibold block mt-1">
+              ঘণ্টা
             </span>
           </div>
 
@@ -152,8 +152,8 @@ function WaitingRoom({
             <span className="text-2xl sm:text-4xl font-black font-mono text-[#F8FAFC] tabular-nums block">
               {String(minutes).padStart(2, '0')}
             </span>
-            <span className="text-[10px] sm:text-xs text-[#818CF8] font-bold uppercase tracking-wider block mt-0.5">
-              {minutes}m (মিনিট)
+            <span className="text-[10px] sm:text-xs text-[#818CF8] font-semibold block mt-1">
+              মিনিট
             </span>
           </div>
 
@@ -161,8 +161,8 @@ function WaitingRoom({
             <span className="text-2xl sm:text-4xl font-black font-mono text-[#4ADE80] tabular-nums block">
               {String(seconds).padStart(2, '0')}
             </span>
-            <span className="text-[10px] sm:text-xs text-[#4ADE80] font-bold uppercase tracking-wider block mt-0.5">
-              {seconds}s (সেকেন্ড)
+            <span className="text-[10px] sm:text-xs text-[#4ADE80] font-semibold block mt-1">
+              সেকেন্ড
             </span>
           </div>
         </div>
@@ -676,6 +676,12 @@ export default function LiveWatchPage() {
 
     flushAttendanceTick()
 
+    const classDurationSec = sched.endAt && sched.startAt
+      ? Math.max(1, Math.round((sched.endAt.toMillis() - sched.startAt.toMillis()) / 1000))
+      : sched.playbackSpeed && sched.playbackSpeed > 0
+      ? Math.max(1, Math.round(sched.durationSeconds / sched.playbackSpeed))
+      : Math.max(1, sched.durationSeconds)
+
     // Final attendance write & studySession creation for Daily Study Time
     finaliseAttendance(user.uid, scheduleId, sessionInstanceId.current, {
       totalActivePlaybackSeconds: Math.round(activePlaybackSecsRef.current),
@@ -683,7 +689,7 @@ export default function LiveWatchPage() {
       totalBufferingSeconds: Math.round(bufferingSecsRef.current),
       liveFollowingTimeSeconds: Math.round(liveFollowingSecsRef.current),
       delayedViewingTimeSeconds: Math.round(delayedViewingSecsRef.current),
-      scheduledDurationSeconds: sched.durationSeconds,
+      scheduledDurationSeconds: classDurationSec,
       joinedAt: joinedAtRef.current || sched.startAt,
       subjectId: sched.subjectId,
       chapterId: sched.chapterId,
@@ -747,13 +753,19 @@ export default function LiveWatchPage() {
   function saveAttendance() {
     if (!user || !scheduleId || !schedule) return
     const activePlayback = Math.round(activePlaybackSecsRef.current)
+    const classDurationSec = schedule.endAt && schedule.startAt
+      ? Math.max(1, Math.round((schedule.endAt.toMillis() - schedule.startAt.toMillis()) / 1000))
+      : schedule.playbackSpeed && schedule.playbackSpeed > 0
+      ? Math.max(1, Math.round(schedule.durationSeconds / schedule.playbackSpeed))
+      : Math.max(1, schedule.durationSeconds)
+
     updateAttendance(user.uid, scheduleId, sessionInstanceId.current, {
       totalActivePlaybackSeconds: activePlayback,
       totalPauseDurationSeconds: Math.round(pauseSecsRef.current),
       totalBufferingSeconds: Math.round(bufferingSecsRef.current),
       liveFollowingTimeSeconds: Math.round(liveFollowingSecsRef.current),
       delayedViewingTimeSeconds: Math.round(delayedViewingSecsRef.current),
-      scheduledDurationSeconds: schedule.durationSeconds,
+      scheduledDurationSeconds: classDurationSec,
       lastSeenAt: null as unknown as Timestamp, // server will fill
     }).catch(() => {})
 
@@ -916,7 +928,8 @@ export default function LiveWatchPage() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-[#F8FAFC] truncate">{schedule.title}</p>
             <p className="text-xs text-[#64748B] truncate">
-              {schedule.subjectName} · {formatScheduleTimeRange(schedule.startAt, schedule.endAt)}
+              {schedule.subjectName}
+              {schedule.chapterName && ` · ${schedule.chapterName}`}
             </p>
           </div>
           <div className="flex items-center gap-1 text-[#64748B]">
@@ -1063,11 +1076,6 @@ export default function LiveWatchPage() {
             <p className="text-sm font-semibold text-white truncate drop-shadow">{schedule.title}</p>
             <p className="text-xs text-[#94A3B8] truncate drop-shadow">
               {schedule.subjectName} · {schedule.chapterName}
-              {schedule.isCustomRange && (
-                <span className="text-[#38BDF8] ml-1.5 font-mono font-medium">
-                  [{formatSecondsToTimestampString(schedule.rangeStartSeconds ?? 0)} – {formatSecondsToTimestampString(schedule.rangeEndSeconds ?? schedule.durationSeconds)}]
-                </span>
-              )}
               {schedule.playbackSpeed && schedule.playbackSpeed !== 1 && (
                 <span className="text-[#A5B4FC] ml-2 font-mono font-bold bg-[#6366F1]/30 px-1.5 py-0.5 rounded text-[10px] border border-[#6366F1]/40 shadow-sm">
                   ⚡ {schedule.playbackSpeed}x

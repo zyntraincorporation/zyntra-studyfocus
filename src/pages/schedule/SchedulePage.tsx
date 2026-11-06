@@ -9,19 +9,22 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   Plus, Radio, CalendarDays, Clock, Play,
-  CheckCircle2, RefreshCw, History, Lock,
+  CheckCircle2, RefreshCw, History, Lock, XCircle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getLockedSchedules, getEndedSchedules } from '@/services/schedule.service'
+import { getAttendanceForSchedules } from '@/services/attendance.service'
 import { initClockSync, getReliableTime } from '@/services/serverTime.service'
-import type { ScheduledClass } from '@/types/schedule.types'
+import type { ScheduledClass, ScheduleAttendanceSummary } from '@/types/schedule.types'
 import {
   deriveScheduleStatus,
   formatScheduleDate,
+  formatScheduleDateNumeric,
   formatScheduleTimeRange,
   formatCountdown,
   formatLiveDuration,
 } from '@/utils/schedule.utils'
+import { formatDurationHuman } from '@/utils/time.utils'
 import { buildRoute, ROUTES } from '@/constants/routes'
 import Button from '@/components/ui/Button'
 import { SkeletonList } from '@/components/ui/Skeleton'
@@ -36,9 +39,11 @@ function getDhakaDateKey(ms: number): string {
 function ScheduleCard({
   schedule,
   reliableNowMs,
+  attendance,
 }: {
   schedule: ScheduledClass
   reliableNowMs: number
+  attendance?: ScheduleAttendanceSummary
 }) {
   const status = deriveScheduleStatus(schedule, reliableNowMs)
   const isLive = status === 'live'
@@ -99,7 +104,15 @@ function ScheduleCard({
             )}
             {isEnded && (
               <div className="absolute inset-0 bg-black/45 rounded-xl flex items-center justify-center">
-                <CheckCircle2 size={18} className="text-[#4ADE80]" />
+                {attendance?.status === 'complete' ? (
+                  <CheckCircle2 size={18} className="text-[#4ADE80]" />
+                ) : attendance?.status === 'partial' ? (
+                  <Clock size={18} className="text-[#FBBF24]" />
+                ) : attendance?.status === 'not_attended' ? (
+                  <XCircle size={18} className="text-[#F87171]" />
+                ) : (
+                  <CheckCircle2 size={18} className="text-[#4ADE80]" />
+                )}
               </div>
             )}
             {isUpcoming && (
@@ -128,12 +141,19 @@ function ScheduleCard({
               )}
             </p>
 
-            {/* Time range & duration */}
+            {/* Time range / Date & duration */}
             <div className="flex items-center gap-1.5 text-xs text-[#64748B] flex-wrap pt-0.5">
-              <span className="flex items-center gap-1 text-[#818CF8] font-mono">
-                <Clock size={11} className="text-[#818CF8] shrink-0" />
-                {formatScheduleTimeRange(schedule.startAt, schedule.endAt)}
-              </span>
+              {isEnded ? (
+                <span className="flex items-center gap-1 text-[#818CF8] font-mono">
+                  <CalendarDays size={11} className="text-[#818CF8] shrink-0" />
+                  {formatScheduleDateNumeric(schedule.startAt)}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-[#818CF8] font-mono">
+                  <Clock size={11} className="text-[#818CF8] shrink-0" />
+                  {formatScheduleTimeRange(schedule.startAt, schedule.endAt)}
+                </span>
+              )}
               <span className="text-[#334155]">·</span>
               <span className="font-mono text-[#94A3B8]">
                 {formatLiveDuration(effectiveDuration)}
@@ -150,9 +170,9 @@ function ScheduleCard({
           </div>
         </div>
 
-        {/* Action & Countdown Section */}
+        {/* Action & Countdown / Attendance Section */}
         <div className="flex items-center justify-between sm:justify-end gap-2.5 pt-2.5 sm:pt-0 border-t border-[#1E2A36]/70 sm:border-t-0 shrink-0">
-          {/* Countdown / Status Pill */}
+          {/* Countdown / Status Pill for Upcoming */}
           {isUpcoming && countdown > 0 && (
             <div className="flex items-center gap-1.5 text-xs font-mono font-medium text-[#818CF8] bg-[#6366F1]/10 px-2.5 py-1 rounded-lg border border-[#6366F1]/20">
               <Clock size={12} className="text-[#818CF8]" />
@@ -160,6 +180,7 @@ function ScheduleCard({
             </div>
           )}
 
+          {/* Live indicator */}
           {isLive && (
             <div className="flex items-center gap-1.5 text-xs font-semibold text-[#4ADE80] sm:hidden">
               <span className="relative flex h-2 w-2">
@@ -170,8 +191,33 @@ function ScheduleCard({
             </div>
           )}
 
+          {/* Ended: Simple Clean Attendance Badge (Completed / Partial / Not Attended only) */}
           {isEnded && (
-            <span className="text-xs text-[#64748B] sm:hidden">ক্লাস সমাপ্ত</span>
+            <div>
+              {attendance ? (
+                attendance.status === 'complete' ? (
+                  <div className="flex items-center gap-1 text-[11px] sm:text-xs font-medium text-[#4ADE80] bg-[#22C55E]/10 px-2.5 py-1 rounded-lg border border-[#22C55E]/25">
+                    <CheckCircle2 size={12} className="text-[#22C55E] shrink-0" />
+                    <span>Completed</span>
+                  </div>
+                ) : attendance.status === 'partial' ? (
+                  <div className="flex items-center gap-1 text-[11px] sm:text-xs font-medium text-[#FBBF24] bg-[#F59E0B]/10 px-2.5 py-1 rounded-lg border border-[#F59E0B]/25">
+                    <Clock size={12} className="text-[#F59E0B] shrink-0" />
+                    <span>Partial</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 text-[11px] sm:text-xs font-medium text-[#F87171] bg-[#EF4444]/10 px-2.5 py-1 rounded-lg border border-[#EF4444]/25">
+                    <XCircle size={12} className="text-[#EF4444] shrink-0" />
+                    <span>Not Attended</span>
+                  </div>
+                )
+              ) : (
+                <div className="flex items-center gap-1 text-xs text-[#64748B] bg-[#1E2A36]/40 px-2.5 py-1 rounded-lg border border-[#1E2A36]">
+                  <CheckCircle2 size={11} className="text-[#64748B]" />
+                  <span>Completed</span>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Action button */}
@@ -258,6 +304,7 @@ export default function SchedulePage() {
 
   const [upcomingSchedules, setUpcomingSchedules] = useState<ScheduledClass[]>([])
   const [endedSchedules, setEndedSchedules] = useState<ScheduledClass[]>([])
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, ScheduleAttendanceSummary>>({})
   const [reliableNowMs, setReliableNowMs] = useState(Date.now())
   const [isLoading, setIsLoading] = useState(true)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -277,6 +324,11 @@ export default function SchedulePage() {
     const notEnded = upcoming.filter((s) => s.endAt.toMillis() > now)
     setUpcomingSchedules(notEnded)
     setEndedSchedules(ended)
+
+    if (ended.length > 0) {
+      getAttendanceForSchedules(user.uid, ended).then(setAttendanceMap)
+    }
+
     setIsLoading(false)
   }, [user])
 
@@ -439,7 +491,12 @@ export default function SchedulePage() {
           ) : (
             <div className="space-y-2">
               {endedSchedules.map((s) => (
-                <ScheduleCard key={s.id} schedule={s} reliableNowMs={reliableNowMs} />
+                <ScheduleCard
+                  key={s.id}
+                  schedule={s}
+                  reliableNowMs={reliableNowMs}
+                  attendance={attendanceMap[s.id]}
+                />
               ))}
             </div>
           )}

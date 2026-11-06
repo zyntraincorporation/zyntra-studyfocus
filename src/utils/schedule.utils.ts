@@ -310,6 +310,24 @@ export function formatScheduleDate(ts: Timestamp): string {
 }
 
 /**
+ * Formats a Firestore Timestamp as DD/MM/YYYY numeric date in Asia/Dhaka timezone.
+ * E.g. "06/11/2026"
+ */
+export function formatScheduleDateNumeric(ts: Timestamp): string {
+  const date = ts.toDate()
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: DHAKA_TZ,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).formatToParts(date)
+  const d = parts.find((p) => p.type === 'day')?.value || ''
+  const m = parts.find((p) => p.type === 'month')?.value || ''
+  const y = parts.find((p) => p.type === 'year')?.value || ''
+  return `${d}/${m}/${y}`
+}
+
+/**
  * Formats a Firestore Timestamp into a Bengali date string with weekday (বার).
  * E.g. "শুক্রবার, ৬ নভেম্বর" or with year "শুক্রবার, ৬ নভেম্বর, ২০২৬"
  */
