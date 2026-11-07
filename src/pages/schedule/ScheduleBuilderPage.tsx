@@ -311,9 +311,14 @@ export default function ScheduleBuilderPage() {
       setShowLockConfirm(false)
       setTimeout(() => navigate(ROUTES.SCHEDULE), 1500)
     } catch (err: unknown) {
-      setLockError(
-        err instanceof Error ? err.message : 'Lock করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।'
-      )
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.toLowerCase().includes('quota') || msg.includes('429') || msg.toLowerCase().includes('resource_exhausted')) {
+        setLockError(
+          'Firebase-এর আজকের দৈনিক রিড লিমিট সাময়িকভাবে শেষ হয়েছে (প্রতিদিন দুপুর ১:০০-২:০০ টার মধ্যে স্বয়ংক্রিয় রিসেট হয়)। কোটা রিসেট হওয়ার পর শিডিউল লক করুন।'
+        )
+      } else {
+        setLockError(msg || 'Lock করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।')
+      }
     } finally {
       setIsLocking(false)
     }

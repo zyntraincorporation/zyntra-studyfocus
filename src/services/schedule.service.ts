@@ -59,6 +59,24 @@ const scheduleDoc = (uid: string, scheduleId: string) =>
 const lectureDoc = (uid: string, lectureId: string) =>
   doc(db, USERS_COL, uid, SUB.LECTURES, lectureId)
 
+// ── In-Memory Fast Cache ──────────────────────────────────────────────
+interface LockedScheduleCacheEntry {
+  userId: string
+  schedules: ScheduledClass[]
+  fetchedAt: number
+}
+
+let lockedSchedulesCache: LockedScheduleCacheEntry | null = null
+const SCHEDULE_CACHE_TTL_MS = 60_000 // 60s TTL prevents duplicate network reads across components
+
+/**
+ * Manually invalidates the locked schedules in-memory cache.
+ * Called whenever a schedule is created, locked, updated, or deleted.
+ */
+export function invalidateScheduleCache(): void {
+  lockedSchedulesCache = null
+}
+
 // ── Read Operations ───────────────────────────────────────────────────
 
 /**
@@ -74,31 +92,50 @@ export async function getScheduledClass(
 
 /**
  * Fetches ALL locked schedules for the user, ordered by startAt.
- * Used for timetable page and conflict checking.
+ * Uses in-memory cache within TTL to eliminate redundant network reads
+ * across ExitQuoteModal, UpcomingClassesSection, and SchedulePage.
  */
-export async function getLockedSchedules(userId: string): Promise<ScheduledClass[]> {
+export async function getLockedSchedules(
+  userId: string,
+  forceRefresh: boolean = false
+): Promise<ScheduledClass[]> {
+  const now = Date.now()
+  if (
+    !forceRefresh &&
+    lockedSchedulesCache &&
+    lockedSchedulesCache.userId === userId &&
+    now - lockedSchedulesCache.fetchedAt < SCHEDULE_CACHE_TTL_MS
+  ) {
+    return lockedSchedulesCache.schedules
+  }
+
   const q = query(
     schedulesCol(userId),
     where('isLocked', '==', true),
     orderBy('startAt', 'asc')
   )
   const snap = await getDocs(q)
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ScheduledClass))
+  const result = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ScheduledClass))
+  lockedSchedulesCache = {
+    userId,
+    schedules: result,
+    fetchedAt: now,
+  }
+  return result
 }
 
 /**
  * Fetches upcoming and live schedules (locked, endAt > now).
- * Used for dashboard "Upcoming Classes" section.
- * Note: Firestore does not support `endAt > now` directly with orderBy startAt
- * without a composite index. We fetch upcoming locked ones and filter client-side.
+ * Uses cached getLockedSchedules to prevent redundant network queries.
  */
 export async function getUpcomingSchedules(
   userId: string,
   reliableNowMs: number,
-  maxCount: number = 10
+  maxCount: number = 10,
+  forceRefresh: boolean = false
 ): Promise<ScheduledClass[]> {
   try {
-    const locked = await getLockedSchedules(userId)
+    const locked = await getLockedSchedules(userId, forceRefresh)
     return locked
       .filter((s) => s.endAt && s.endAt.toMillis() > reliableNowMs)
       .slice(0, maxCount)
@@ -110,14 +147,16 @@ export async function getUpcomingSchedules(
 
 /**
  * Fetches ended schedules for history page.
+ * Reuses cached getLockedSchedules to avoid duplicate network roundtrips.
  */
 export async function getEndedSchedules(
   userId: string,
   reliableNowMs: number,
-  maxCount: number = 50
+  maxCount: number = 50,
+  forceRefresh: boolean = false
 ): Promise<ScheduledClass[]> {
   try {
-    const locked = await getLockedSchedules(userId)
+    const locked = await getLockedSchedules(userId, forceRefresh)
     return locked
       .filter((s) => s.endAt && s.endAt.toMillis() <= reliableNowMs)
       .sort((a, b) => b.endAt.toMillis() - a.endAt.toMillis())
@@ -335,6 +374,9 @@ export async function executeLockRoutine(
       updatedAt: serverTimestamp(),
     })
   })
+
+  // Invalidate cache immediately on successful lock so new lock is reflected
+  invalidateScheduleCache()
 }
 
 /**
@@ -425,6 +467,7 @@ export async function clearLectureLockAfterClass(
     }
 
     await batch.commit()
+    invalidateScheduleCache()
   } catch (err) {
     // Non-fatal: the time-based check in curriculum.service will still work correctly
     console.warn('[schedule.service] Failed to clear lecture lock after class:', err)

@@ -406,20 +406,140 @@ export default function LiveWatchPage() {
     }
   }, [])
 
-  // ── Fullscreen ───────────────────────────────────────────────────
+  // ── Fullscreen & Mobile Landscape Orientation ─────────────────────
   useEffect(() => {
-    const h = () => setIsFullscreen(!!document.fullscreenElement)
-    document.addEventListener('fullscreenchange', h)
-    return () => document.removeEventListener('fullscreenchange', h)
+    const handleFullscreenChange = () => {
+      const doc = document as unknown as {
+        fullscreenElement?: Element
+        webkitFullscreenElement?: Element
+        mozFullScreenElement?: Element
+        msFullscreenElement?: Element
+      }
+      const isFs = !!(
+        doc.fullscreenElement ||
+        doc.webkitFullscreenElement ||
+        doc.mozFullScreenElement ||
+        doc.msFullscreenElement
+      )
+      setIsFullscreen(isFs)
+
+      if (isFs) {
+        // Double-check landscape lock when entering fullscreen (handles async race conditions)
+        const orientation = screen.orientation as unknown as {
+          lock?: (type: string) => Promise<void>
+        } | undefined
+        if (orientation && typeof orientation.lock === 'function') {
+          orientation.lock('landscape').catch(() => {
+            orientation.lock?.('landscape-primary').catch(() => {})
+          })
+        }
+      } else {
+        // Automatically restore natural orientation when exiting fullscreen (button, back gesture, or ESC)
+        if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+          try {
+            screen.orientation.unlock()
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange)
+      if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+        try {
+          screen.orientation.unlock()
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }, [])
 
-  const toggleFullscreen = useCallback(() => {
+  const toggleFullscreen = useCallback(async () => {
     const el = containerRef.current
     if (!el) return
-    if (!document.fullscreenElement) {
-      el.requestFullscreen().catch(() => {})
-    } else {
-      document.exitFullscreen().catch(() => {})
+
+    const doc = document as unknown as {
+      fullscreenElement?: Element
+      webkitFullscreenElement?: Element
+      mozFullScreenElement?: Element
+      msFullscreenElement?: Element
+      exitFullscreen?: () => Promise<void>
+      webkitExitFullscreen?: () => Promise<void>
+      mozCancelFullScreen?: () => Promise<void>
+      msExitFullscreen?: () => Promise<void>
+    }
+
+    const isFs = !!(
+      doc.fullscreenElement ||
+      doc.webkitFullscreenElement ||
+      doc.mozFullScreenElement ||
+      doc.msFullscreenElement
+    )
+
+    try {
+      if (!isFs) {
+        // 1. Enter fullscreen with vendor fallbacks
+        const targetEl = el as unknown as {
+          requestFullscreen?: () => Promise<void>
+          webkitRequestFullscreen?: () => Promise<void>
+          mozRequestFullScreen?: () => Promise<void>
+          msRequestFullscreen?: () => Promise<void>
+        }
+
+        if (targetEl.requestFullscreen) {
+          await targetEl.requestFullscreen()
+        } else if (targetEl.webkitRequestFullscreen) {
+          await targetEl.webkitRequestFullscreen()
+        } else if (targetEl.mozRequestFullScreen) {
+          await targetEl.mozRequestFullScreen()
+        } else if (targetEl.msRequestFullscreen) {
+          await targetEl.msRequestFullscreen()
+        }
+
+        // 2. Lock screen orientation to landscape on mobile devices
+        const orientation = screen.orientation as unknown as {
+          lock?: (type: string) => Promise<void>
+        } | undefined
+        if (orientation && typeof orientation.lock === 'function') {
+          try {
+            await orientation.lock('landscape')
+          } catch {
+            try {
+              await orientation.lock('landscape-primary')
+            } catch {
+              /* ignore orientation lock on unsupported browsers (e.g. iOS Safari) */
+            }
+          }
+        }
+      } else {
+        // 1. Unlock orientation back to user preference
+        if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+          try {
+            screen.orientation.unlock()
+          } catch {
+            /* ignore */
+          }
+        }
+
+        // 2. Exit fullscreen with vendor fallbacks
+        if (doc.exitFullscreen) {
+          await doc.exitFullscreen()
+        } else if (doc.webkitExitFullscreen) {
+          await doc.webkitExitFullscreen()
+        } else if (doc.mozCancelFullScreen) {
+          await doc.mozCancelFullScreen()
+        } else if (doc.msExitFullscreen) {
+          await doc.msExitFullscreen()
+        }
+      }
+    } catch (err) {
+      console.warn('[LiveWatchPage] Fullscreen error:', err)
     }
   }, [])
 

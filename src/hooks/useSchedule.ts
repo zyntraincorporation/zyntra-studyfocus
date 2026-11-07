@@ -95,7 +95,12 @@ export function useSchedule(
       } catch (err) {
         if (!cancelled) {
           console.error('[useSchedule] Load error:', err)
-          setError('Schedule লোড করতে সমস্যা হয়েছে।')
+          const msg = err instanceof Error ? err.message : String(err)
+          if (msg.toLowerCase().includes('quota') || msg.includes('429') || msg.toLowerCase().includes('resource_exhausted')) {
+            setError('Firebase-এর আজকের দৈনিক রিড কোটা শেষ হয়েছে (দুপুর ১:০০ - ২:০০ টার মধ্যে স্বয়ংক্রিয়ভাবে রিসেট হবে)।')
+          } else {
+            setError('Schedule লোড করতে সমস্যা হয়েছে।')
+          }
           setIsLoading(false)
         }
       }

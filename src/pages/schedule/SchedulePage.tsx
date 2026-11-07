@@ -309,19 +309,22 @@ export default function SchedulePage() {
   const [isLoading, setIsLoading] = useState(true)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
     if (!user) return
     setIsLoading(true)
     await initClockSync()
     const now = getReliableTime()
     setReliableNowMs(now)
 
-    const [upcoming, ended] = await Promise.all([
-      getLockedSchedules(user.uid),
-      getEndedSchedules(user.uid, now, 50),
-    ])
+    // Single query for locked schedules (served instantly from in-memory / IndexedDB cache)
+    const allLocked = await getLockedSchedules(user.uid, forceRefresh)
 
-    const notEnded = upcoming.filter((s) => s.endAt.toMillis() > now)
+    const notEnded = allLocked.filter((s) => s.endAt && s.endAt.toMillis() > now)
+    const ended = allLocked
+      .filter((s) => s.endAt && s.endAt.toMillis() <= now)
+      .sort((a, b) => b.endAt.toMillis() - a.endAt.toMillis())
+      .slice(0, 50)
+
     setUpcomingSchedules(notEnded)
     setEndedSchedules(ended)
 
@@ -380,7 +383,7 @@ export default function SchedulePage() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={load}
+            onClick={() => load(true)}
             className="p-2 rounded-xl text-[#475569] hover:text-[#F8FAFC] border border-[#1E2A36] hover:border-[#334155] hover:bg-[#111820] transition-colors cursor-pointer"
             title="রিফ্রেশ করুন"
           >
