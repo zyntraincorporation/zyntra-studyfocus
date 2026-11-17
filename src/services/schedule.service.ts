@@ -193,8 +193,9 @@ export async function createDraftSchedule(
   input: ScheduledClassDraftInput
 ): Promise<string> {
   const speed = input.playbackSpeed && input.playbackSpeed > 0 ? input.playbackSpeed : 1
+  const breakDuration = input.breakDurationMinutes
   const startAt = scheduledDateTimeToTimestamp(input.scheduledDate, input.scheduledStartTime)
-  const totalDurationSecs = getTotalScheduledDuration(input.durationSeconds, speed)
+  const totalDurationSecs = getTotalScheduledDuration(input.durationSeconds, speed, breakDuration)
   const endAt = Timestamp.fromMillis(startAt.toMillis() + totalDurationSecs * 1000)
 
   const ref = await addDoc(schedulesCol(userId), {
@@ -213,6 +214,7 @@ export async function createDraftSchedule(
     rangeEndSeconds: input.rangeEndSeconds ?? input.durationSeconds,
     originalVideoDuration: input.originalVideoDuration ?? input.durationSeconds,
     playbackSpeed: speed,
+    breakDurationMinutes: breakDuration ?? null,
     startAt,
     endAt,
     timezone: 'Asia/Dhaka',
@@ -245,7 +247,8 @@ export async function updateDraftSchedule(
   if (input.scheduledDate && input.scheduledStartTime) {
     const durationSecs = input.durationSeconds ?? existing.durationSeconds
     const speed = input.playbackSpeed ?? existing.playbackSpeed ?? 1
-    const totalDurationSecs = getTotalScheduledDuration(durationSecs, speed)
+    const breakDuration = input.breakDurationMinutes ?? existing.breakDurationMinutes
+    const totalDurationSecs = getTotalScheduledDuration(durationSecs, speed, breakDuration)
     const startAt = scheduledDateTimeToTimestamp(input.scheduledDate, input.scheduledStartTime)
     const endAt = Timestamp.fromMillis(startAt.toMillis() + totalDurationSecs * 1000)
     updates.startAt = startAt
@@ -253,6 +256,7 @@ export async function updateDraftSchedule(
   }
 
   if (input.playbackSpeed !== undefined) updates.playbackSpeed = input.playbackSpeed
+  if (input.breakDurationMinutes !== undefined) updates.breakDurationMinutes = input.breakDurationMinutes
 
   if (input.lectureId !== undefined) updates.lectureId = input.lectureId
   if (input.title !== undefined) updates.title = input.title
@@ -341,11 +345,19 @@ export async function executeLockRoutine(
     }
 
     const lectureData = lectureSnap.data()
+    const isMultiAllowed = lectureData.allowMultipleSchedules === true
 
-    // ── 5. Validate: Lecture not already locked by another schedule ────
-    if (lectureData.lockedScheduleId && lectureData.lockedScheduleId !== scheduleId) {
+    // Check if there is an ACTIVE/FUTURE lock on this lecture
+    const hasActiveLock =
+      Boolean(lectureData.lockedScheduleId) &&
+      lectureData.lockedScheduleId !== scheduleId &&
+      Boolean(lectureData.lockedUntil) &&
+      lectureData.lockedUntil.toMillis() > reliableNowMs
+
+    // ── 5. Validate: Lecture not already locked by another schedule (if multiple not allowed) ────
+    if (!isMultiAllowed && hasActiveLock) {
       throw new Error(
-        'This lecture already has an active scheduled class. One lecture can only be locked once at a time.'
+        'এই লেকচারের সক্রিয় শিডিউল রয়েছে। একাধিকবার শিডিউল করতে লেকচারে "একাধিকবার লাইভ শিডিউল" চালু করুন।'
       )
     }
 
@@ -366,13 +378,25 @@ export async function executeLockRoutine(
     })
 
     // ── 8. Atomic Write: Lock the lecture ─────────────────────────────
-    // Set the access lock on the lecture document.
-    // This does NOT modify any of the lecture's learning content.
-    transaction.update(lectureRef, {
-      lockedScheduleId: scheduleId,
-      lockedUntil: schedule.endAt,
-      updatedAt: serverTimestamp(),
-    })
+    // For single-schedule lectures, set lockedScheduleId and lockedUntil.
+    // For multi-schedule lectures, update lock if no active lock exists or if this schedule is earlier/active.
+    if (!isMultiAllowed || !lectureData.lockedUntil || lectureData.lockedUntil.toMillis() <= reliableNowMs) {
+      transaction.update(lectureRef, {
+        lockedScheduleId: scheduleId,
+        lockedUntil: schedule.endAt,
+        updatedAt: serverTimestamp(),
+      })
+    } else {
+      // If there's already an active/future lock, extend to the later endAt if needed
+      const currentEndMs = lectureData.lockedUntil.toMillis()
+      const thisEndMs = schedule.endAt.toMillis()
+      if (thisEndMs > currentEndMs) {
+        transaction.update(lectureRef, {
+          lockedUntil: schedule.endAt,
+          updatedAt: serverTimestamp(),
+        })
+      }
+    }
   })
 
   // Invalidate cache immediately on successful lock so new lock is reflected
@@ -386,7 +410,7 @@ export async function executeLockRoutine(
  * Pre-checks (before transaction):
  *   - Schedule is not in the past
  *   - No time overlap with other locked schedules
- *   - No duplicate lecture active schedule
+ *   - No duplicate lecture active schedule (unless lecture allows multiple schedules)
  *
  * Then executes the atomic transaction.
  */
@@ -407,6 +431,11 @@ export async function lockSchedule(
     )
   }
 
+  // Fetch linked lecture to check if multiple schedules are allowed
+  const lectureRef = lectureDoc(userId, schedule.lectureId)
+  const lectureSnap = await getDoc(lectureRef)
+  const allowMultipleSchedules = lectureSnap.exists() && lectureSnap.data().allowMultipleSchedules === true
+
   // Fetch all currently active locked schedules for conflict detection
   const activeSchedules = await getUpcomingSchedules(userId, reliableNowMs, 100)
 
@@ -414,14 +443,15 @@ export async function lockSchedule(
     schedule.startAt.toMillis(),
     schedule.endAt.toMillis(),
     schedule.lectureId,
-    activeSchedules.filter((s) => s.id !== scheduleId) // Exclude self
+    activeSchedules.filter((s) => s.id !== scheduleId), // Exclude self
+    allowMultipleSchedules
   )
 
   if (conflicts.length > 0) {
     const first = conflicts[0]
     if (first.type === 'duplicate_lecture') {
       throw new Error(
-        `This lecture is already scheduled as "${first.title}". A lecture can only be scheduled once at a time.`
+        `এই লেকচারের সক্রিয় শিডিউল রয়েছে ("${first.title}")। একাধিকবার শিডিউল করতে লেকচারে "একাধিকবার লাইভ শিডিউল" চালু করুন।`
       )
     } else {
       throw new Error(

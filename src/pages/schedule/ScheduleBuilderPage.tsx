@@ -18,10 +18,10 @@ import {
   Coffee, SlidersHorizontal, Play, Zap, Check, Sparkles, Gauge
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { getSubjects, getLecturesBySubject } from '@/services/curriculum.service'
+import { getSubjects, getLecturesBySubject, getChapters } from '@/services/curriculum.service'
 import { createDraftSchedule, lockSchedule } from '@/services/schedule.service'
 import { initClockSync, getReliableTime } from '@/services/serverTime.service'
-import type { Subject, Lecture } from '@/types/curriculum.types'
+import type { Subject, Lecture, Chapter } from '@/types/curriculum.types'
 import type { ScheduledClassDraftInput } from '@/types/schedule.types'
 import { getThumbnailUrl } from '@/utils/youtube.utils'
 import { formatDuration } from '@/utils/time.utils'
@@ -133,6 +133,8 @@ export default function ScheduleBuilderPage() {
   // Step 1: Lecture selection state
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null)
+  const [chapters, setChapters] = useState<Chapter[]>([])
+  const [selectedChapterId, setSelectedChapterId] = useState<string>('all')
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedLecture, setSelectedLecture] = useState<Lecture | null>(null)
@@ -140,6 +142,7 @@ export default function ScheduleBuilderPage() {
   const [isLoadingLectures, setIsLoadingLectures] = useState(false)
 
   // Step 2: Date, Time & Range state
+  const [liveClassTitle, setLiveClassTitle] = useState('')
   const [scheduledDate, setScheduledDate] = useState(getTomorrowDateKey())
   const [scheduledStartTime, setScheduledStartTime] = useState(getDefaultStartTime())
   const [isCustomRange, setIsCustomRange] = useState(false)
@@ -148,6 +151,7 @@ export default function ScheduleBuilderPage() {
   const [customStartInput, setCustomStartInput] = useState('00:00:00')
   const [customEndInput, setCustomEndInput] = useState('00:00:00')
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1)
+  const [breakDurationMinutes, setBreakDurationMinutes] = useState<number>(10)
 
   // Step 3: Lock state
   const [showLockConfirm, setShowLockConfirm] = useState(false)
@@ -159,11 +163,18 @@ export default function ScheduleBuilderPage() {
   // ── Handlers ────────────────────────────────────────────────────────
   const handleSelectLecture = useCallback((lec: Lecture) => {
     setSelectedLecture(lec)
+    setLiveClassTitle(lec.title)
     setIsCustomRange(false)
     setCustomRangeStart(0)
     setCustomStartInput('00:00:00')
     setCustomRangeEnd(lec.duration)
     setCustomEndInput(formatSecondsToTimestampString(lec.duration))
+    // Default break duration: 5m for 1h30m-3h, 10m for 3h+
+    if (lec.duration >= 180 * 60) {
+      setBreakDurationMinutes(10)
+    } else {
+      setBreakDurationMinutes(5)
+    }
   }, [])
 
   const handleStartInputChange = (val: string) => {
@@ -213,22 +224,40 @@ export default function ScheduleBuilderPage() {
     setIsLoadingLectures(true)
     setLectures([])
     setSelectedLecture(null)
-    getLecturesBySubject(user.uid, selectedSubject.id).then((lecs) => {
-      const available = lecs.filter((l) => {
-        if (!l.lockedUntil) return true
-        return l.lockedUntil.toMillis() <= getReliableTime()
-      })
+    setSelectedChapterId('all')
+
+    Promise.all([
+      getLecturesBySubject(user.uid, selectedSubject.id),
+      getChapters(user.uid, selectedSubject.id),
+    ]).then(([lecs, chaps]) => {
+      setChapters(chaps)
+      const chapterMap = new Map(chaps.map((c) => [c.id, c.name]))
+      const nowMs = getReliableTime()
+      const available = lecs
+        .filter((l) => {
+          // Marathon or one-shot lectures with allowMultipleSchedules can be scheduled multiple times
+          if (l.allowMultipleSchedules) return true
+          if (!l.lockedUntil) return true
+          return l.lockedUntil.toMillis() <= nowMs
+        })
+        .map((l) => ({
+          ...l,
+          // Always ensure the freshest chapter name is used
+          chapterName: chapterMap.get(l.chapterId) || l.chapterName,
+        }))
       setLectures(available)
+      setIsLoadingLectures(false)
+    }).catch(() => {
       setIsLoadingLectures(false)
     })
   }, [user, selectedSubject])
 
-  const filteredLectures = lectures.filter(
-    (l) =>
-      !searchQuery ||
-      l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      l.chapterName.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredLectures = lectures.filter((l) => {
+    if (selectedChapterId !== 'all' && l.chapterId !== selectedChapterId) return false
+    if (!searchQuery) return true
+    const q = searchQuery.toLowerCase()
+    return l.title.toLowerCase().includes(q) || l.chapterName.toLowerCase().includes(q)
+  })
 
   // ── Computed values ───────────────────────────────────────────────────
   const scheduledDurationSeconds = selectedLecture
@@ -240,9 +269,9 @@ export default function ScheduleBuilderPage() {
   const scheduledDurationFormatted = formatDuration(scheduledDurationSeconds)
   const effectiveWallDurationSecs = Math.round(scheduledDurationSeconds / playbackSpeed)
   const breakInfo = selectedLecture
-    ? calculateScheduleBreakInfo(scheduledDurationSeconds, 0, playbackSpeed)
+    ? calculateScheduleBreakInfo(scheduledDurationSeconds, 0, playbackSpeed, breakDurationMinutes)
     : null
-  const totalScheduledDurationSecs = getTotalScheduledDuration(scheduledDurationSeconds, playbackSpeed)
+  const totalScheduledDurationSecs = getTotalScheduledDuration(scheduledDurationSeconds, playbackSpeed, breakDurationMinutes)
   const startTimestamp = selectedLecture
     ? scheduledDateTimeToTimestamp(scheduledDate, scheduledStartTime)
     : null
@@ -286,7 +315,7 @@ export default function ScheduleBuilderPage() {
     try {
       const draftInput: ScheduledClassDraftInput = {
         lectureId: selectedLecture.id,
-        title: selectedLecture.title,
+        title: liveClassTitle.trim() || selectedLecture.title,
         subjectId: selectedLecture.subjectId,
         subjectName: selectedLecture.subjectName,
         chapterId: selectedLecture.chapterId,
@@ -304,6 +333,7 @@ export default function ScheduleBuilderPage() {
         rangeEndSeconds: isCustomRange ? customRangeEnd : selectedLecture.duration,
         originalVideoDuration: selectedLecture.duration,
         playbackSpeed,
+        breakDurationMinutes: effectiveWallDurationSecs >= 90 * 60 ? breakDurationMinutes : undefined,
       }
       const scheduleId = await createDraftSchedule(user.uid, draftInput)
       await lockSchedule(user.uid, scheduleId, getReliableTime())
@@ -323,9 +353,10 @@ export default function ScheduleBuilderPage() {
       setIsLocking(false)
     }
   }, [
-    user, selectedLecture, scheduledDate, scheduledStartTime,
+    user, selectedLecture, liveClassTitle, scheduledDate, scheduledStartTime,
     isCustomRange, customRangeStart, customRangeEnd,
-    scheduledDurationSeconds, scheduledDurationFormatted, playbackSpeed, navigate,
+    scheduledDurationSeconds, scheduledDurationFormatted, playbackSpeed,
+    effectiveWallDurationSecs, breakDurationMinutes, navigate,
   ])
 
   // ── Success screen ────────────────────────────────────────────────────
@@ -453,6 +484,40 @@ export default function ScheduleBuilderPage() {
                   />
                 </div>
               </div>
+
+              {/* Simple Chapter Filter Chips */}
+              {!isLoadingLectures && chapters.length > 0 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedChapterId('all')}
+                    className={`text-xs px-2.5 py-1 rounded-lg border font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                      selectedChapterId === 'all'
+                        ? 'bg-[#6366F1] border-[#6366F1] text-white shadow-xs'
+                        : 'bg-[#111820] border-[#1E2A36] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-[#334155]'
+                    }`}
+                  >
+                    সব অধ্যায় ({lectures.length})
+                  </button>
+                  {chapters.map((c) => {
+                    const count = lectures.filter((l) => l.chapterId === c.id).length
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSelectedChapterId(c.id)}
+                        className={`text-xs px-2.5 py-1 rounded-lg border font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                          selectedChapterId === c.id
+                            ? 'bg-[#6366F1] border-[#6366F1] text-white shadow-xs'
+                            : 'bg-[#111820] border-[#1E2A36] text-[#94A3B8] hover:text-[#F8FAFC] hover:border-[#334155]'
+                        }`}
+                      >
+                        {c.name} {count > 0 && <span className="opacity-70 text-[10px]">({count})</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
               {isLoadingLectures ? (
                 <div className="space-y-2">
@@ -627,6 +692,29 @@ export default function ScheduleBuilderPage() {
             >
               পরিবর্তন
             </button>
+          </div>
+
+          {/* ── Live Class Title Customization ── */}
+          <div className="space-y-1.5 bg-[#111820] border border-[#1E2A36] rounded-xl p-3 sm:p-3.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs sm:text-sm font-bold text-[#F8FAFC] flex items-center gap-1.5">
+                <Sparkles size={13} className="text-[#818CF8]" />
+                লাইভ ক্লাসের শিরোনাম
+              </label>
+              <span className="text-[10px] text-[#818CF8] bg-[#6366F1]/10 px-2 py-0.5 rounded border border-[#6366F1]/20">
+                ঐচ্ছিক
+              </span>
+            </div>
+            <input
+              type="text"
+              value={liveClassTitle}
+              onChange={(e) => setLiveClassTitle(e.target.value)}
+              placeholder="যেমন: ভেক্টর ওয়ান-শট (পর্ব-০১)"
+              className="w-full bg-[#0B0F14] border border-[#1E2A36] focus:border-[#6366F1] rounded-xl px-3.5 py-2 text-xs sm:text-sm text-[#F8FAFC] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#6366F1] transition-all"
+            />
+            <p className="text-[10px] text-[#64748B]">
+              * মূল রেকর্ডেড ক্লাসের নাম অপরিবর্তিত থাকবে।
+            </p>
           </div>
 
           {/* ── Scheduling Scope Options ── */}
@@ -879,6 +967,89 @@ export default function ScheduleBuilderPage() {
             </div>
           </div>
 
+          {/* ── Break Duration Section (for 1h30m+ and 3h+ classes) ── */}
+          {effectiveWallDurationSecs >= 90 * 60 && (
+            <div className="space-y-1.5">
+              {effectiveWallDurationSecs < 180 * 60 ? (
+                // 1h30m to <3h: Mandatory 5-min break after 1 hour
+                <div className="bg-[#111820] border border-[#F59E0B]/30 rounded-xl p-3 sm:p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-[#F59E0B]/15 text-[#F59E0B] flex items-center justify-center shrink-0">
+                        <Coffee size={14} />
+                      </div>
+                      <div>
+                        <p className="text-xs sm:text-sm font-bold text-[#F8FAFC]">স্টাডি বিরতি</p>
+                        <p className="text-[10px] text-[#94A3B8]">
+                          ১ ঘণ্টা পর ৫ মিনিটের বাধ্যতামূলক বিরতি
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[#FBBF24] bg-[#F59E0B]/15 px-2 py-0.5 rounded border border-[#F59E0B]/30 shrink-0">
+                      ৫ মিনিট
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                // 3h+ Marathon class: Editable break duration after every 1 hour
+                <div className="bg-[#111820] border border-[#6366F1]/40 rounded-xl p-3 sm:p-3.5 space-y-2.5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-[#6366F1]/20 text-[#818CF8] flex items-center justify-center shrink-0">
+                        <Coffee size={14} />
+                      </div>
+                      <div>
+                        <p className="text-xs sm:text-sm font-bold text-[#F8FAFC]">প্রতি ১ ঘণ্টা পর বিরতির সময়</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-[#818CF8] bg-[#6366F1]/10 px-2 py-0.5 rounded border border-[#6366F1]/30 shrink-0">
+                      {breakDurationMinutes} মিনিট
+                    </span>
+                  </div>
+
+                  {/* Quick Presets & Custom Input */}
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    {[5, 10, 15, 20].map((mins) => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => setBreakDurationMinutes(mins)}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          breakDurationMinutes === mins
+                            ? 'bg-[#6366F1] text-white shadow-sm font-semibold ring-1 ring-[#6366F1]'
+                            : 'bg-[#17202A] text-[#94A3B8] hover:text-white hover:bg-[#1E2A36] border border-[#1E2A36]'
+                        }`}
+                      >
+                        {mins} মি.{mins === 10 ? ' (ডিফল্ট)' : ''}
+                      </button>
+                    ))}
+
+                    <div className="flex items-center gap-1 bg-[#17202A] border border-[#1E2A36] rounded-lg px-2.5 py-1">
+                      <span className="text-[10px] text-[#64748B]">কাস্টম:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={breakDurationMinutes}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10)
+                          if (!isNaN(v) && v > 0) setBreakDurationMinutes(Math.min(60, v))
+                        }}
+                        className="w-10 bg-transparent text-xs font-mono font-bold text-[#818CF8] focus:outline-none text-center"
+                      />
+                      <span className="text-[10px] text-[#64748B]">মি.</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-[#64748B] flex items-center gap-1">
+                    <Sparkles size={11} className="text-[#818CF8]" />
+                    মোট {breakInfo?.totalBreaks ?? 0}টি বিরতি (সর্বমোট {((breakInfo?.totalBreaks ?? 0) * breakDurationMinutes)} মিনিট)
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Schedule Preview Card (Compact) ── */}
           {startTimestamp && computedEndTimestamp && (
             <div className="bg-[#0B1628] border border-[#1E3A5F] rounded-xl p-3 sm:p-3.5 space-y-2.5 shadow-md">
@@ -918,7 +1089,7 @@ export default function ScheduleBuilderPage() {
                 <div className="flex items-center gap-1.5 bg-[#F59E0B]/10 border border-[#F59E0B]/25 rounded-lg px-2.5 py-1.5 text-xs text-[#FBBF24]">
                   <Coffee size={13} className="shrink-0 text-[#F59E0B]" />
                   <span>
-                    {breakInfo.totalBreaks}টি বিরতি (+{breakInfo.totalBreaks * 10} মিনিট) যুক্ত হয়েছে।
+                    {breakInfo.totalBreaks}টি বিরতি (মোট {breakInfo.totalBreaks * (breakInfo.breakDurationMinutes || 5)} মিনিট) যুক্ত হয়েছে।
                   </span>
                 </div>
               )}
@@ -976,10 +1147,10 @@ export default function ScheduleBuilderPage() {
                   {selectedLecture.subjectName}
                 </span>
                 <h2 className="text-sm sm:text-base font-bold text-white mt-1 leading-snug drop-shadow line-clamp-1">
-                  {selectedLecture.title}
+                  {liveClassTitle.trim() || selectedLecture.title}
                 </h2>
                 <p className="text-xs text-[#CBD5E1] drop-shadow">
-                  {selectedLecture.chapterName}
+                  {selectedLecture.chapterName}{liveClassTitle.trim() && liveClassTitle.trim() !== selectedLecture.title ? ` · মূল লেকচার: ${selectedLecture.title}` : ''}
                 </p>
               </div>
             </div>
@@ -1065,7 +1236,7 @@ export default function ScheduleBuilderPage() {
       >
         <div className="space-y-3">
           <p className="text-xs sm:text-sm text-[#E2E8F0] leading-relaxed">
-            <span className="font-bold text-white">"{selectedLecture?.title}"</span>-এর
+            <span className="font-bold text-white">"{liveClassTitle.trim() || selectedLecture?.title}"</span>-এর
             শিডিউল কি স্থায়ীভাবে Lock করতে চান?
           </p>
 

@@ -26,6 +26,7 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { USERS_COL, SUB } from '@/constants/firebase'
+import { invalidateScheduleCache } from '@/services/schedule.service'
 import type {
   Subject,
   Chapter,
@@ -147,6 +148,13 @@ export async function getChapters(
   return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 }
 
+export async function getAllChapters(userId: string): Promise<Chapter[]> {
+  const q = query(chaptersCol(userId), where('isActive', '==', true))
+  const snap = await getDocs(q)
+  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Chapter)
+  return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+}
+
 export async function getChapter(
   userId: string,
   chapterId: string
@@ -196,6 +204,49 @@ export async function updateChapter(
     ...cleanedData,
     updatedAt: serverTimestamp(),
   })
+
+  // Synchronize chapter name changes across lectures and scheduled classes
+  if (data.name && data.name.trim()) {
+    const newName = data.name.trim()
+    try {
+      // 1. Update all lectures of this chapter
+      const lecsSnap = await getDocs(
+        query(lecturesCol(userId), where('chapterId', '==', chapterId))
+      )
+      if (!lecsSnap.empty) {
+        const batch = writeBatch(db)
+        lecsSnap.docs.forEach((d) => {
+          batch.update(d.ref, {
+            chapterName: newName,
+            updatedAt: serverTimestamp(),
+          })
+        })
+        await batch.commit()
+      }
+
+      // 2. Update all schedules of this chapter
+      const schedsSnap = await getDocs(
+        query(
+          collection(db, USERS_COL, userId, SUB.SCHEDULED_CLASSES),
+          where('chapterId', '==', chapterId)
+        )
+      )
+      if (!schedsSnap.empty) {
+        const batchSched = writeBatch(db)
+        schedsSnap.docs.forEach((d) => {
+          batchSched.update(d.ref, {
+            chapterName: newName,
+            updatedAt: serverTimestamp(),
+          })
+        })
+        await batchSched.commit()
+      }
+
+      invalidateScheduleCache()
+    } catch (err) {
+      console.error('Failed to cascade chapter name update:', err)
+    }
+  }
 }
 
 export async function deleteChapter(
@@ -323,13 +374,39 @@ export async function createLecture(
 export async function updateLecture(
   userId: string,
   lectureId: string,
-  data: Partial<Pick<Lecture, 'title' | 'description' | 'isImportant' | 'isEngineeringAdmission' | 'videoStatus' | 'slideUrl' | 'noteHtml' | 'timestamps' | 'attachments'>>
+  data: Partial<Pick<Lecture, 'title' | 'description' | 'isImportant' | 'isEngineeringAdmission' | 'allowMultipleSchedules' | 'videoStatus' | 'slideUrl' | 'noteHtml' | 'timestamps' | 'attachments'>>
 ): Promise<void> {
   const cleanedData = cleanUndefined(data)
   await updateDoc(lectureDoc(userId, lectureId), {
     ...cleanedData,
     updatedAt: serverTimestamp(),
   })
+
+  // Synchronize lecture title changes to scheduled classes
+  if (data.title && data.title.trim()) {
+    const newTitle = data.title.trim()
+    try {
+      const schedsSnap = await getDocs(
+        query(
+          collection(db, USERS_COL, userId, SUB.SCHEDULED_CLASSES),
+          where('lectureId', '==', lectureId)
+        )
+      )
+      if (!schedsSnap.empty) {
+        const schedBatch = writeBatch(db)
+        schedsSnap.docs.forEach((d) => {
+          schedBatch.update(d.ref, {
+            title: newTitle,
+            updatedAt: serverTimestamp(),
+          })
+        })
+        await schedBatch.commit()
+      }
+      invalidateScheduleCache()
+    } catch (err) {
+      console.error('Failed to propagate lecture title update to schedules:', err)
+    }
+  }
 }
 
 export async function deleteLecture(

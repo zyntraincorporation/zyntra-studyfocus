@@ -141,7 +141,8 @@ export function useSchedule(
     ? calculateScheduleBreakInfo(
         schedule.durationSeconds,
         status === 'live' ? realElapsed : 0,
-        schedule.playbackSpeed ?? 1
+        schedule.playbackSpeed ?? 1,
+        schedule.breakDurationMinutes
       )
     : {
         hasBreaks: false,
@@ -149,6 +150,7 @@ export function useSchedule(
         currentBreakNumber: 0,
         totalBreaks: 0,
         breakRemainingSeconds: 0,
+        breakDurationMinutes: 0,
         expectedVideoPosition: 0,
         totalScheduledDurationSeconds: 0,
       }

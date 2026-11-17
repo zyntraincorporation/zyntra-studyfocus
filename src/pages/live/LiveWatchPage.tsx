@@ -1123,7 +1123,7 @@ export default function LiveWatchPage() {
               {formatDuration(breakInfo.breakRemainingSeconds)}
             </p>
             <p className="text-xs sm:text-sm text-[#94A3B8]">
-              ১০ মিনিটের বিরতি চলছে • বিরতি শেষে ক্লাস স্বয়ংক্রিয়ভাবে পরবর্তী অংশ থেকে শুরু হবে
+              {breakInfo.breakDurationMinutes || 10} মিনিটের বিরতি চলছে • বিরতি শেষে ক্লাস স্বয়ংক্রিয়ভাবে পরবর্তী অংশ থেকে শুরু হবে
             </p>
           </div>
 

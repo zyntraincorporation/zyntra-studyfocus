@@ -89,6 +89,7 @@ export interface Lecture {
   order: number
   isImportant: boolean
   isEngineeringAdmission?: boolean  // true = Engineering Admission class (shown in priority section)
+  allowMultipleSchedules?: boolean  // true = allows multiple live schedules (e.g. for long marathon / one-shot classes)
   isActive: boolean
   videoStatus: VideoStatus
   slideUrl?: string
@@ -138,4 +139,5 @@ export type LectureInput = {
   timestamps?: LectureTimestamp[]
   attachments?: LectureAttachment[]
   isEngineeringAdmission?: boolean
+  allowMultipleSchedules?: boolean
 }

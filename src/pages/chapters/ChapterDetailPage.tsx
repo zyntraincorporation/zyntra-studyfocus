@@ -5,7 +5,7 @@ import {
   CheckCircle2, Star, Loader2, AlertCircle, CheckCircle,
   Clock, Paperclip, ExternalLink, GripVertical, FileText,
   Code2, Eye, Check, BookOpen, GraduationCap, ChevronDown,
-  Lock, Upload, FolderOpen,
+  Lock, Upload, FolderOpen, Layers,
 } from 'lucide-react'
 import {
   getSubject,
@@ -253,6 +253,9 @@ export default function ChapterDetailPage() {
   // ── Engineering admission state ────────────────────────────────────
   const [isEngineeringAdmission, setIsEngineeringAdmission] = useState(false)
 
+  // ── Allow Multiple Schedules state (for marathon/one-shot lectures) ─
+  const [allowMultipleSchedules, setAllowMultipleSchedules] = useState(false)
+
   // ── Reliable Server Time for Live Lock Status ──────────────────────
   const [reliableNowMs, setReliableNowMs] = useState(Date.now())
 
@@ -315,6 +318,7 @@ export default function ChapterDetailPage() {
     setNoteHtmlView('code')
     setNoteHtmlExpanded(false)
     setIsEngineeringAdmission(false)
+    setAllowMultipleSchedules(false)
   }
 
   const openAdd = () => {
@@ -339,6 +343,7 @@ export default function ChapterDetailPage() {
     setTimestamps(l.timestamps ?? [])
     setAttachments(l.attachments ?? [])
     setIsEngineeringAdmission(l.isEngineeringAdmission ?? false)
+    setAllowMultipleSchedules(l.allowMultipleSchedules ?? false)
     setNoteHtmlExpanded(!!l.noteHtml)  // expand if already has content
     setShowTimestampRaw(false)  // show editable list when editing existing lecture
     setNoteHtmlView('code')
@@ -414,6 +419,7 @@ export default function ChapterDetailPage() {
         timestamps: finalTimestamps.length > 0 ? finalTimestamps : [],
         attachments: validAttachments.length > 0 ? validAttachments : [],
         isEngineeringAdmission: isEngineeringAdmission || undefined,
+        allowMultipleSchedules: allowMultipleSchedules || false,
       })
     } else {
       if (!preview) return
@@ -437,6 +443,7 @@ export default function ChapterDetailPage() {
           ...(timestamps.length > 0 ? { timestamps } : {}),
           ...(validAttachments.length > 0 ? { attachments: validAttachments } : {}),
           ...(isEngineeringAdmission ? { isEngineeringAdmission: true } : {}),
+          allowMultipleSchedules: allowMultipleSchedules || false,
         },
         lectures.length
       )
@@ -1201,6 +1208,61 @@ export default function ChapterDetailPage() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* ── Multiple Live Schedules Permission Toggle ── */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setAllowMultipleSchedules((prev) => !prev)}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault()
+                setAllowMultipleSchedules((prev) => !prev)
+              }
+            }}
+            className={`flex items-center justify-between gap-3 px-3.5 py-3 rounded-xl border transition-all duration-200 cursor-pointer select-none ${
+              allowMultipleSchedules
+                ? 'bg-[#6366F1]/10 border-[#6366F1]/40 shadow-sm shadow-[#6366F1]/5'
+                : 'bg-[#0B0F14] border-[#1E2A36] hover:border-[#334155]'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+                  allowMultipleSchedules
+                    ? 'bg-[#6366F1]/20 text-[#818CF8]'
+                    : 'bg-[#17202A] text-[#64748B]'
+                }`}
+              >
+                <Layers size={15} />
+              </div>
+              <div>
+                <p className={`text-xs font-semibold transition-colors ${
+                  allowMultipleSchedules ? 'text-[#818CF8]' : 'text-[#F8FAFC]'
+                }`}>
+                  একাধিকবার লাইভ শিডিউল
+                </p>
+                <p className="text-[10px] text-[#94A3B8]">
+                  ম্যারাথন বা ওয়ান-শট ক্লাসের জন্য
+                </p>
+              </div>
+            </div>
+
+            {/* Switch slider */}
+            <div
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out p-0.5 ${
+                allowMultipleSchedules ? 'bg-[#6366F1]' : 'bg-[#1E2A36]'
+              }`}
+              role="switch"
+              aria-checked={allowMultipleSchedules}
+            >
+              <span
+                className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out ${
+                  allowMultipleSchedules ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </div>
           </div>
 
         </div>

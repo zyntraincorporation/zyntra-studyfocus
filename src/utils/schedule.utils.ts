@@ -17,37 +17,58 @@ import { Timestamp } from 'firebase/firestore'
 
 // ── Long Class Break Constants & Calculator ────────────────────────────
 export const BREAK_INTERVAL_SECONDS = 3600 // 1 hour of active lecture
-export const BREAK_DURATION_SECONDS = 600  // 10 minutes mandatory break
-export const LONG_CLASS_THRESHOLD_SECONDS = 150 * 60 // 2h 30m (classes around 3h+)
+export const BREAK_DURATION_MEDIUM_SECONDS = 300 // 5 minutes break for 1h 30m+ classes
+export const BREAK_DURATION_LONG_SECONDS = 600   // 10 minutes default break for 3h+ classes
+export const MEDIUM_CLASS_THRESHOLD_SECONDS = 90 * 60 // 1h 30m (5400s)
+export const LONG_CLASS_THRESHOLD_SECONDS = 180 * 60  // 3h (10800s)
 
 /**
- * Calculates mandatory break timeline for long marathon classes (around 3h+ / >= 2h30m).
- * Every 1 hour of lecture, a mandatory 10-minute break pauses the lecture.
- * Supports custom playbackSpeed (e.g. 1.25x, 1.5x, 2x).
+ * Calculates mandatory break timeline:
+ * - For classes >= 1h 30m (90m) up to < 3h: exactly 1 break after 1 hour (default 5 min).
+ * - For classes >= 3h (180m): breaks occur after every 1 hour (default 10 min, configurable in schedule builder).
+ * - Supports custom playbackSpeed (e.g. 1.25x, 1.5x, 2x).
+ * - Supports custom breakDurationMinutes.
  */
 export function calculateScheduleBreakInfo(
   durationSeconds: number,
   realElapsedSeconds: number,
-  playbackSpeed: number = 1
+  playbackSpeed: number = 1,
+  breakDurationMinutes?: number
 ): BreakInfo {
   const speed = playbackSpeed > 0 ? playbackSpeed : 1
   const activeWallSeconds = Math.round(durationSeconds / speed)
 
-  if (activeWallSeconds < LONG_CLASS_THRESHOLD_SECONDS) {
+  // Classes less than 1h 30m: No breaks needed
+  if (activeWallSeconds < MEDIUM_CLASS_THRESHOLD_SECONDS) {
     return {
       hasBreaks: false,
       isBreakActive: false,
       currentBreakNumber: 0,
       totalBreaks: 0,
       breakRemainingSeconds: 0,
+      breakDurationMinutes: 0,
       expectedVideoPosition: Math.max(0, Math.min(realElapsedSeconds, activeWallSeconds)),
       totalScheduledDurationSeconds: activeWallSeconds,
     }
   }
 
-  // Number of breaks: 1 after each 1 hour block, provided at least 15m (900s) remain after it
-  const totalBreaks = Math.max(0, Math.floor((activeWallSeconds - 900) / BREAK_INTERVAL_SECONDS))
-  const totalScheduledDurationSeconds = activeWallSeconds + totalBreaks * BREAK_DURATION_SECONDS
+  // Determine break duration and count
+  const isMarathon = activeWallSeconds >= LONG_CLASS_THRESHOLD_SECONDS
+  // Default break duration: 5m for 1h30m-3h, 10m for 3h+
+  const defaultBreakMinutes = isMarathon ? 10 : 5
+  const effectiveBreakMinutes = (typeof breakDurationMinutes === 'number' && breakDurationMinutes > 0)
+    ? breakDurationMinutes
+    : defaultBreakMinutes
+  const breakDurationSecs = effectiveBreakMinutes * 60
+
+  // Total breaks:
+  // For 1h30m to <3h: exactly 1 break after 1h
+  // For 3h+: 1 break after every 1h, provided at least 15m (900s) remain after it
+  const totalBreaks = isMarathon
+    ? Math.max(1, Math.floor((activeWallSeconds - 900) / BREAK_INTERVAL_SECONDS))
+    : 1
+
+  const totalScheduledDurationSeconds = activeWallSeconds + totalBreaks * breakDurationSecs
 
   if (realElapsedSeconds <= 0) {
     return {
@@ -56,16 +77,17 @@ export function calculateScheduleBreakInfo(
       currentBreakNumber: 0,
       totalBreaks,
       breakRemainingSeconds: 0,
+      breakDurationMinutes: effectiveBreakMinutes,
       expectedVideoPosition: 0,
       totalScheduledDurationSeconds,
     }
   }
 
-  // Iterate through each [Lecture 1h + Break 10m] segment
+  // Iterate through each [Lecture 1h + Break B] segment
   for (let k = 0; k < totalBreaks; k++) {
-    const lectureStart = k * (BREAK_INTERVAL_SECONDS + BREAK_DURATION_SECONDS)
+    const lectureStart = k * (BREAK_INTERVAL_SECONDS + breakDurationSecs)
     const breakStart = lectureStart + BREAK_INTERVAL_SECONDS
-    const breakEnd = breakStart + BREAK_DURATION_SECONDS
+    const breakEnd = breakStart + breakDurationSecs
 
     if (realElapsedSeconds >= lectureStart && realElapsedSeconds < breakStart) {
       // Actively in lecture block k
@@ -76,6 +98,7 @@ export function calculateScheduleBreakInfo(
         currentBreakNumber: k,
         totalBreaks,
         breakRemainingSeconds: 0,
+        breakDurationMinutes: effectiveBreakMinutes,
         expectedVideoPosition: Math.min(elapsedActive, activeWallSeconds),
         totalScheduledDurationSeconds,
       }
@@ -91,6 +114,7 @@ export function calculateScheduleBreakInfo(
         currentBreakNumber: k + 1,
         totalBreaks,
         breakRemainingSeconds,
+        breakDurationMinutes: effectiveBreakMinutes,
         expectedVideoPosition: elapsedActive,
         totalScheduledDurationSeconds,
       }
@@ -98,7 +122,7 @@ export function calculateScheduleBreakInfo(
   }
 
   // Past all breaks — in final lecture block
-  const finalBlockRealStart = totalBreaks * (BREAK_INTERVAL_SECONDS + BREAK_DURATION_SECONDS)
+  const finalBlockRealStart = totalBreaks * (BREAK_INTERVAL_SECONDS + breakDurationSecs)
   const wallOffset = totalBreaks * BREAK_INTERVAL_SECONDS
   const elapsedInFinalBlock = Math.max(0, realElapsedSeconds - finalBlockRealStart)
   const elapsedActive = Math.min(activeWallSeconds, wallOffset + elapsedInFinalBlock)
@@ -109,16 +133,21 @@ export function calculateScheduleBreakInfo(
     currentBreakNumber: totalBreaks,
     totalBreaks,
     breakRemainingSeconds: 0,
+    breakDurationMinutes: effectiveBreakMinutes,
     expectedVideoPosition: elapsedActive,
     totalScheduledDurationSeconds,
   }
 }
 
 /**
- * Returns total scheduled duration in seconds, including any mandatory breaks and factoring in playbackSpeed.
+ * Returns total scheduled duration in seconds, including any mandatory breaks and factoring in playbackSpeed and custom breakDurationMinutes.
  */
-export function getTotalScheduledDuration(durationSeconds: number, playbackSpeed: number = 1): number {
-  return calculateScheduleBreakInfo(durationSeconds, 0, playbackSpeed).totalScheduledDurationSeconds
+export function getTotalScheduledDuration(
+  durationSeconds: number,
+  playbackSpeed: number = 1,
+  breakDurationMinutes?: number
+): number {
+  return calculateScheduleBreakInfo(durationSeconds, 0, playbackSpeed, breakDurationMinutes).totalScheduledDurationSeconds
 }
 
 // ── Schedule Status Determination ─────────────────────────────────────
@@ -144,7 +173,7 @@ export function deriveScheduleStatus(
 
   const startMs = schedule.startAt.toMillis()
   const speed = schedule.playbackSpeed && schedule.playbackSpeed > 0 ? schedule.playbackSpeed : 1
-  const totalDurationMs = getTotalScheduledDuration(schedule.durationSeconds, speed) * 1000
+  const totalDurationMs = getTotalScheduledDuration(schedule.durationSeconds, speed, schedule.breakDurationMinutes) * 1000
   const effectiveEndMs = Math.max(schedule.endAt.toMillis(), startMs + totalDurationMs)
 
   if (reliableNowMs < startMs) return 'upcoming'
@@ -173,7 +202,7 @@ export function calculateExpectedLivePosition(
   const speed = schedule.playbackSpeed && schedule.playbackSpeed > 0 ? schedule.playbackSpeed : 1
 
   // Calculate elapsed progress through the scheduled lecture block (with breaks handled)
-  const breakInfo = calculateScheduleBreakInfo(schedule.durationSeconds, elapsed, speed)
+  const breakInfo = calculateScheduleBreakInfo(schedule.durationSeconds, elapsed, speed, schedule.breakDurationMinutes)
   const videoOffset = breakInfo.expectedVideoPosition * speed
 
   const rangeStart = schedule.rangeStartSeconds ?? 0
@@ -253,7 +282,8 @@ export function buildScheduleDisplayInfo(
   const breakInfo = calculateScheduleBreakInfo(
     schedule.durationSeconds,
     status === 'live' ? Math.max(0, (reliableNowMs - schedule.startAt.toMillis()) / 1000) : 0,
-    schedule.playbackSpeed ?? 1
+    schedule.playbackSpeed ?? 1,
+    schedule.breakDurationMinutes
   )
 
   return {
@@ -449,7 +479,8 @@ export function detectScheduleConflicts(
   proposedStartMs: number,
   proposedEndMs: number,
   proposedLectureId: string,
-  existingSchedules: ScheduledClass[]
+  existingSchedules: ScheduledClass[],
+  allowMultipleSchedules: boolean = false
 ): Array<{ scheduleId: string; title: string; type: 'duplicate_lecture' | 'time_overlap' }> {
   const conflicts: Array<{ scheduleId: string; title: string; type: 'duplicate_lecture' | 'time_overlap' }> = []
 
@@ -462,8 +493,8 @@ export function detectScheduleConflicts(
 
     const existingStartMs = existing.startAt.toMillis()
 
-    // 1. Duplicate lecture check: same lecture can't have two active schedules
-    if (existing.lectureId === proposedLectureId) {
+    // 1. Duplicate lecture check: only enforced if multiple schedules are NOT permitted
+    if (!allowMultipleSchedules && existing.lectureId === proposedLectureId) {
       conflicts.push({
         scheduleId: existing.id,
         title: existing.title,

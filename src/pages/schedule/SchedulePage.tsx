@@ -10,11 +10,14 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   Plus, Radio, CalendarDays, Clock, Play,
   CheckCircle2, RefreshCw, History, Lock, XCircle,
+  BookOpen, FolderOpen, ArrowUpDown, RotateCcw,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { getLockedSchedules, getEndedSchedules } from '@/services/schedule.service'
 import { getAttendanceForSchedules } from '@/services/attendance.service'
 import { initClockSync, getReliableTime } from '@/services/serverTime.service'
+import { getSubjects, getAllChapters } from '@/services/curriculum.service'
+import type { Subject, Chapter } from '@/types/curriculum.types'
 import type { ScheduledClass, ScheduleAttendanceSummary } from '@/types/schedule.types'
 import {
   deriveScheduleStatus,
@@ -33,6 +36,31 @@ import EmptyState from '@/components/ui/EmptyState'
 // ── Helper ────────────────────────────────────────────────────────────
 function getDhakaDateKey(ms: number): string {
   return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })
+}
+
+function groupSchedulesByChapter(schedules: ScheduledClass[]) {
+  const groups: { key: string; chapterName: string; subjectName: string; schedules: ScheduledClass[] }[] = []
+  const map = new Map<string, typeof groups[0]>()
+
+  schedules.forEach((s) => {
+    const key = s.chapterId || s.chapterName || 'other'
+    if (!map.has(key)) {
+      const g = {
+        key,
+        chapterName: s.chapterName || 'অধ্যায় নির্ধারিত নয়',
+        subjectName: s.subjectName || 'সাধারণ বিষয়',
+        schedules: [],
+      }
+      map.set(key, g)
+      groups.push(g)
+    }
+    map.get(key)!.schedules.push(s)
+  })
+
+  return groups.sort((a, b) =>
+    (a.subjectName || '').localeCompare(b.subjectName || '', 'bn') ||
+    (a.chapterName || '').localeCompare(b.chapterName || '', 'bn')
+  )
 }
 
 // ── Schedule Card ─────────────────────────────────────────────────────
@@ -180,17 +208,6 @@ function ScheduleCard({
             </div>
           )}
 
-          {/* Live indicator */}
-          {isLive && (
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-[#4ADE80] sm:hidden">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4ADE80] opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4ADE80]" />
-              </span>
-              <span>লাইভ চলছে</span>
-            </div>
-          )}
-
           {/* Ended: Simple Clean Attendance Badge (Completed / Partial / Not Attended only) */}
           {isEnded && (
             <div>
@@ -304,6 +321,11 @@ export default function SchedulePage() {
 
   const [upcomingSchedules, setUpcomingSchedules] = useState<ScheduledClass[]>([])
   const [endedSchedules, setEndedSchedules] = useState<ScheduledClass[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [chapters, setChapters] = useState<Chapter[]>([])
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all')
+  const [selectedChapterId, setSelectedChapterId] = useState<string>('all')
+  const [sortBy, setSortBy] = useState<'time' | 'chapter'>('time')
   const [attendanceMap, setAttendanceMap] = useState<Record<string, ScheduleAttendanceSummary>>({})
   const [reliableNowMs, setReliableNowMs] = useState(Date.now())
   const [isLoading, setIsLoading] = useState(true)
@@ -316,11 +338,28 @@ export default function SchedulePage() {
     const now = getReliableTime()
     setReliableNowMs(now)
 
-    // Single query for locked schedules (served instantly from in-memory / IndexedDB cache)
-    const allLocked = await getLockedSchedules(user.uid, forceRefresh)
+    // Concurrently fetch locked schedules, subjects, and chapters
+    const [allLocked, allSubjects, allChapters] = await Promise.all([
+      getLockedSchedules(user.uid, forceRefresh),
+      getSubjects(user.uid).catch(() => []),
+      getAllChapters(user.uid).catch(() => []),
+    ])
 
-    const notEnded = allLocked.filter((s) => s.endAt && s.endAt.toMillis() > now)
-    const ended = allLocked
+    const chapterMap = new Map(allChapters.map((c) => [c.id, c.name]))
+    const subjectMap = new Map(allSubjects.map((s) => [s.id, s.name]))
+
+    // Dynamically synchronize chapterName & subjectName so any edits are immediately reflected
+    const synchronized = allLocked.map((s) => ({
+      ...s,
+      chapterName: chapterMap.get(s.chapterId) || s.chapterName,
+      subjectName: subjectMap.get(s.subjectId) || s.subjectName,
+    }))
+
+    setSubjects(allSubjects)
+    setChapters(allChapters)
+
+    const notEnded = synchronized.filter((s) => s.endAt && s.endAt.toMillis() > now)
+    const ended = synchronized
       .filter((s) => s.endAt && s.endAt.toMillis() <= now)
       .sort((a, b) => b.endAt.toMillis() - a.endAt.toMillis())
       .slice(0, 50)
@@ -344,16 +383,33 @@ export default function SchedulePage() {
   const todayKey = getDhakaDateKey(reliableNowMs)
   const tomorrowKey = getDhakaDateKey(reliableNowMs + 86400000)
 
-  const todayClasses = upcomingSchedules.filter(
+  // Filter options
+  const filteredChapterOptions = selectedSubjectId === 'all'
+    ? chapters
+    : chapters.filter((c) => c.subjectId === selectedSubjectId)
+
+  const filterSchedule = (s: ScheduledClass) => {
+    if (selectedSubjectId !== 'all' && s.subjectId !== selectedSubjectId) return false
+    if (selectedChapterId !== 'all' && s.chapterId !== selectedChapterId) return false
+    return true
+  }
+
+  const filteredUpcoming = upcomingSchedules.filter(filterSchedule)
+  const filteredEnded = endedSchedules.filter(filterSchedule)
+
+  const todayClasses = filteredUpcoming.filter(
     (s) => getDhakaDateKey(s.startAt.toMillis()) === todayKey
   )
-  const tomorrowClasses = upcomingSchedules.filter(
+  const tomorrowClasses = filteredUpcoming.filter(
     (s) => getDhakaDateKey(s.startAt.toMillis()) === tomorrowKey
   )
-  const laterClasses = upcomingSchedules.filter((s) => {
+  const laterClasses = filteredUpcoming.filter((s) => {
     const dk = getDhakaDateKey(s.startAt.toMillis())
     return dk !== todayKey && dk !== tomorrowKey
   })
+
+  const upcomingByChapter = groupSchedulesByChapter(filteredUpcoming)
+  const endedByChapter = groupSchedulesByChapter(filteredEnded)
 
   const liveCount = upcomingSchedules.filter(
     (s) => deriveScheduleStatus(s, reliableNowMs) === 'live'
@@ -363,22 +419,17 @@ export default function SchedulePage() {
     <div className="animate-fade-in max-w-4xl mx-auto w-full px-3 sm:px-6 space-y-5 sm:space-y-6 pb-12">
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-            <h1 className="text-xl sm:text-2xl font-bold text-[#F8FAFC]">ক্লাস রুটিন</h1>
-            {liveCount > 0 && (
-              <span className="flex items-center gap-1 bg-[#16A34A]/15 border border-[#16A34A]/30 text-[#4ADE80] text-[10px] font-bold px-2 py-0.5 rounded-full">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4ADE80] opacity-75" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#4ADE80]" />
-                </span>
-                {liveCount}টি LIVE
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-[#F8FAFC]">ক্লাস রুটিন</h1>
+          {liveCount > 0 && (
+            <span className="flex items-center gap-1 bg-[#16A34A]/15 border border-[#16A34A]/30 text-[#4ADE80] text-[10px] font-bold px-2 py-0.5 rounded-full">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4ADE80] opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#4ADE80]" />
               </span>
-            )}
-          </div>
-          <p className="text-xs sm:text-sm text-[#64748B]">
-            আপনার নির্ধারিত সকল লাইভ ক্লাসের ধারাবাহিক রুটিন
-          </p>
+              {liveCount}টি LIVE
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -437,24 +488,121 @@ export default function SchedulePage() {
         ))}
       </div>
 
+      {/* ── Simple Subject & Chapter Filter & Sort Bar ── */}
+      {!isLoading && (upcomingSchedules.length > 0 || endedSchedules.length > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 sm:p-2.5 bg-[#0B0F14] border border-[#1E2A36] rounded-xl text-xs">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+            {/* Subject Filter */}
+            <div className="flex items-center gap-1.5 min-w-[130px] sm:min-w-[150px]">
+              <BookOpen size={13} className="text-[#818CF8] shrink-0" />
+              <select
+                value={selectedSubjectId}
+                onChange={(e) => {
+                  setSelectedSubjectId(e.target.value)
+                  setSelectedChapterId('all')
+                }}
+                className="w-full bg-[#111820] border border-[#1E2A36] text-[#F8FAFC] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#6366F1] cursor-pointer"
+              >
+                <option value="all">সকল বিষয়</option>
+                {subjects.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {sub.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Chapter Filter */}
+            <div className="flex items-center gap-1.5 min-w-[140px] sm:min-w-[160px]">
+              <FolderOpen size={13} className="text-[#38BDF8] shrink-0" />
+              <select
+                value={selectedChapterId}
+                onChange={(e) => setSelectedChapterId(e.target.value)}
+                className="w-full bg-[#111820] border border-[#1E2A36] text-[#F8FAFC] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#6366F1] cursor-pointer"
+              >
+                <option value="all">সকল অধ্যায়</option>
+                {filteredChapterOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reset Filters button */}
+            {(selectedSubjectId !== 'all' || selectedChapterId !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedSubjectId('all')
+                  setSelectedChapterId('all')
+                }}
+                className="flex items-center gap-1 text-[11px] text-[#818CF8] hover:text-[#A5B4FC] px-1.5 py-1 rounded transition-colors cursor-pointer"
+                title="ফিল্টার রিসেট করুন"
+              >
+                <RotateCcw size={11} />
+                <span>রিসেট</span>
+              </button>
+            )}
+          </div>
+
+          {/* Sort Selector: By Time vs By Chapter */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <ArrowUpDown size={12} className="text-[#64748B]" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'time' | 'chapter')}
+              className="bg-[#111820] border border-[#1E2A36] text-[#F8FAFC] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#6366F1] cursor-pointer text-xs"
+            >
+              <option value="time">সময় অনুযায়ী</option>
+              <option value="chapter">অধ্যায় অনুযায়ী</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* ── Content ── */}
       {isLoading ? (
         <SkeletonList count={4} />
       ) : tab === 'upcoming' ? (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-5">
           {upcomingSchedules.length === 0 ? (
             <EmptyState
               icon={<CalendarDays size={36} />}
-              title="কোনো আসন্ন ক্লাস রুটিন নেই"
-              description="নতুন ক্লাস শিডিউল তৈরি করে আপনার রুটিন সাজান।"
+              title="কোনো আসন্ন ক্লাস নেই"
               action={
                 <Link to={ROUTES.SCHEDULE_CREATE}>
-                  <Button leftIcon={<Plus size={14} />}>নতুন শিডিউল তৈরি করুন</Button>
+                  <Button leftIcon={<Plus size={14} />}>নতুন শিডিউল</Button>
                 </Link>
               }
             />
+          ) : filteredUpcoming.length === 0 ? (
+            <div className="text-center py-8 text-[#64748B] text-xs sm:text-sm border border-dashed border-[#1E2A36] rounded-xl bg-[#0D1117] space-y-2">
+              <p>কোনো ক্লাস পাওয়া যায়নি</p>
+              <button
+                onClick={() => {
+                  setSelectedSubjectId('all')
+                  setSelectedChapterId('all')
+                }}
+                className="text-xs text-[#818CF8] hover:underline cursor-pointer font-medium"
+              >
+                ফিল্টার মুছুন
+              </button>
+            </div>
+          ) : sortBy === 'chapter' ? (
+            <div className="space-y-4">
+              {upcomingByChapter.map((group) => (
+                <DateSection
+                  key={group.key}
+                  title={`${group.subjectName} · ${group.chapterName}`}
+                  icon={<FolderOpen size={13} className="text-[#38BDF8]" />}
+                  schedules={group.schedules}
+                  reliableNowMs={reliableNowMs}
+                />
+              ))}
+            </div>
           ) : (
-            <>
+            <div className="space-y-5 sm:space-y-6">
               {todayClasses.length > 0 && (
                 <DateSection
                   title="আজকের রুটিন"
@@ -479,21 +627,58 @@ export default function SchedulePage() {
                   reliableNowMs={reliableNowMs}
                 />
               )}
-            </>
+            </div>
           )}
         </div>
       ) : (
         /* History tab */
-        <div className="space-y-2">
+        <div className="space-y-3">
           {endedSchedules.length === 0 ? (
             <EmptyState
               icon={<CheckCircle2 size={36} />}
               title="কোনো সম্পন্ন ক্লাস নেই"
-              description="ক্লাস শেষ হলে এখানে ইতিহাস দেখাবে।"
             />
+          ) : filteredEnded.length === 0 ? (
+            <div className="text-center py-8 text-[#64748B] text-xs sm:text-sm border border-dashed border-[#1E2A36] rounded-xl bg-[#0D1117] space-y-2">
+              <p>কোনো ক্লাস পাওয়া যায়নি</p>
+              <button
+                onClick={() => {
+                  setSelectedSubjectId('all')
+                  setSelectedChapterId('all')
+                }}
+                className="text-xs text-[#818CF8] hover:underline cursor-pointer font-medium"
+              >
+                ফিল্টার মুছুন
+              </button>
+            </div>
+          ) : sortBy === 'chapter' ? (
+            <div className="space-y-4">
+              {endedByChapter.map((group) => (
+                <div key={group.key} className="space-y-2.5">
+                  <div className="flex items-center gap-2 py-1">
+                    <FolderOpen size={13} className="text-[#38BDF8]" />
+                    <span className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider">
+                      {group.subjectName} · {group.chapterName}
+                    </span>
+                    <div className="flex-1 h-px bg-[#1E2A36]" />
+                    <span className="text-[11px] text-[#64748B] font-mono">{group.schedules.length}টি ক্লাস</span>
+                  </div>
+                  <div className="space-y-2">
+                    {group.schedules.map((s) => (
+                      <ScheduleCard
+                        key={s.id}
+                        schedule={s}
+                        reliableNowMs={reliableNowMs}
+                        attendance={attendanceMap[s.id]}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <div className="space-y-2">
-              {endedSchedules.map((s) => (
+              {filteredEnded.map((s) => (
                 <ScheduleCard
                   key={s.id}
                   schedule={s}

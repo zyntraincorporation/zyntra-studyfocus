@@ -33,6 +33,7 @@ export interface BreakInfo {
   currentBreakNumber: number
   totalBreaks: number
   breakRemainingSeconds: number
+  breakDurationMinutes: number
   expectedVideoPosition: number
   totalScheduledDurationSeconds: number
 }
@@ -79,6 +80,10 @@ export interface ScheduledClass {
   // Speed at which the live class runs (e.g. 1, 1.25, 1.5, 1.75, 2). Default: 1.
   playbackSpeed?: number
 
+  // ── Break Duration (Optional) ───────────────────────────────────────
+  // Custom duration for breaks in minutes. Default: 5 for 1h30m-3h, 10 for 3h+.
+  breakDurationMinutes?: number
+
   // ── Schedule Timing (all UTC, immutable after lock) ─────────────────
   startAt: Timestamp              // Scheduled start (Asia/Dhaka → UTC stored)
   endAt: Timestamp                // Calculated: startAt + durationSeconds (immutable)
@@ -115,6 +120,8 @@ export interface ScheduledClassDraftInput {
   originalVideoDuration?: number
   // Playback speed
   playbackSpeed?: number
+  // Break duration
+  breakDurationMinutes?: number
 }
 
 // ── Derived Schedule Info (computed client-side) ───────────────────────
